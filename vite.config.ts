@@ -112,6 +112,10 @@ export default defineConfig(({ mode }) => {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
+      build: {
+        // Avoid noisy large-chunk warnings in CI/CD logs (e.g. Vercel).
+        chunkSizeWarningLimit: 2000,
+      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),

@@ -111,8 +111,8 @@ const AuthScreen: React.FC = () => {
   // Payment / Plan Selection Screen
   if (showPayment) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 overflow-y-auto">
-        <div className="w-full max-w-lg my-auto">
+      <div className="min-h-screen bg-gray-50 overflow-y-auto p-4">
+        <div className="w-full max-w-lg mx-auto py-6">
           {/* Logo */}
           <div className="text-center mb-6">
             <div className="w-14 h-14 bg-[#F57C00] rounded-2xl flex items-center justify-center font-bold text-2xl text-white mx-auto mb-3 shadow-lg shadow-orange-200">
