@@ -60,6 +60,34 @@ type ActiveScreen =
   | 'MENU_CONFIG'
   | 'ALL_ORDERS';
 
+const ONBOARDING_STEPS = [
+  {
+    title: 'Open Navigation',
+    message: 'Click the top-left menu icon (three lines) to open navigation.',
+    indicator: 'Top-left corner',
+  },
+  {
+    title: 'Go To Configuration',
+    message: 'From the sidebar, open Configuration to set up your restaurant data.',
+    indicator: 'Sidebar -> Configuration',
+  },
+  {
+    title: 'Add Categories First',
+    message: 'Inside Configuration, create categories first (for example: Starters, Main Course, Drinks).',
+    indicator: 'Configuration -> Categories tab',
+  },
+  {
+    title: 'Add Menu Items',
+    message: 'Now add items and assign each item to a category so they appear in billing.',
+    indicator: 'Configuration -> Menu Items tab',
+  },
+  {
+    title: 'Start Billing',
+    message: 'After setup, go back to Billing and start creating orders.',
+    indicator: 'Billing screen',
+  },
+] as const;
+
 const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('BILLING');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -74,27 +102,22 @@ const App: React.FC = () => {
   });
   const [mobileTab, setMobileTab] = useState<'analytics' | 'orders' | 'bills' | 'reports'>('analytics');
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
   
   // States with Local Storage fallback
   const [categories, setCategories] = useState<Category[]>(() => {
     const saved = localStorage.getItem('drona_categories');
-    return saved ? JSON.parse(saved) : INITIAL_CATEGORIES;
+    return saved ? JSON.parse(saved) : [];
   });
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => {
     const saved = localStorage.getItem('drona_menu_items');
-    return saved ? JSON.parse(saved) : INITIAL_MENU_ITEMS;
+    return saved ? JSON.parse(saved) : [];
   });
   const [orders, setOrders] = useState<Order[]>([]);  // Orders are stored in Firebase only
   const [tables, setTables] = useState<Table[]>(() => {
     const saved = localStorage.getItem('drona_tables');
-    return saved ? JSON.parse(saved) : [
-      { id: 't1', name: 'T-1', status: 'AVAILABLE' },
-      { id: 't2', name: 'T-2', status: 'AVAILABLE' },
-      { id: 't3', name: 'T-3', status: 'AVAILABLE' },
-      { id: 't4', name: 'T-4', status: 'AVAILABLE' },
-      { id: 't5', name: 'T-5', status: 'AVAILABLE' },
-      { id: 't6', name: 'T-6', status: 'AVAILABLE' },
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
   const [addons, setAddons] = useState<Addon[]>(() => {
     const saved = localStorage.getItem('drona_addons');
@@ -170,33 +193,42 @@ const App: React.FC = () => {
   // Helper to get user-scoped Firebase path
   const userPath = (path: string) => `users/${user?.uid}/${path}`;
 
-  // Initialize Firebase with default data if empty (only once, not on every load)
+  const markOnboardingDone = async () => {
+    if (!user) return;
+    try {
+      await set(ref(db, userPath('meta/onboardingCompleted')), true);
+    } catch (error) {
+      console.error('Failed to save onboarding state:', error);
+    }
+  };
+
+  const handleOnboardingNext = async () => {
+    const currentStep = onboardingStep;
+    if (currentStep === 0) {
+      setIsSidebarOpen(true);
+    }
+    if (currentStep === 1) {
+      setActiveScreen('MENU_CONFIG');
+      setIsSidebarOpen(false);
+    }
+    if (currentStep === ONBOARDING_STEPS.length - 1) {
+      setShowOnboarding(false);
+      await markOnboardingDone();
+      return;
+    }
+    setOnboardingStep((prev) => prev + 1);
+  };
+
+  const handleOnboardingSkip = async () => {
+    setShowOnboarding(false);
+    await markOnboardingDone();
+  };
+
+  // Initialize user settings if empty (do not auto-seed menu/category sample data)
   useEffect(() => {
     if (!user) return;
     const initializeDatabase = async () => {
       try {
-        // Check if menu data already exists in Firebase
-        const categoriesRef = ref(db, userPath('categories'));
-        onValue(categoriesRef, async (snapshot) => {
-          if (!snapshot.exists()) {
-            // Only sync if no data exists
-            for (const cat of INITIAL_CATEGORIES) {
-              await set(ref(db, userPath(`categories/${cat.id}`)), cat);
-            }
-            console.log('Categories synced to Firebase');
-          }
-        }, { onlyOnce: true });
-
-        const menuRef = ref(db, userPath('menu_items'));
-        onValue(menuRef, async (snapshot) => {
-          if (!snapshot.exists()) {
-            for (const item of INITIAL_MENU_ITEMS) {
-              await set(ref(db, userPath(`menu_items/${item.id}`)), item);
-            }
-            console.log('Menu items synced to Firebase');
-          }
-        }, { onlyOnce: true });
-
         const settingsRef = ref(db, userPath('settings'));
         onValue(settingsRef, async (snapshot) => {
           if (!snapshot.exists()) {
@@ -209,6 +241,14 @@ const App: React.FC = () => {
             };
             await set(settingsRef, { taxRate: taxRateVal, restaurantInfo: restaurantVal });
             console.log('Settings (taxes, restaurant) synced to Firebase');
+          }
+        }, { onlyOnce: true });
+
+        const onboardingRef = ref(db, userPath('meta/onboardingCompleted'));
+        onValue(onboardingRef, (snapshot) => {
+          if (!snapshot.exists() || !snapshot.val()) {
+            setShowOnboarding(true);
+            setOnboardingStep(0);
           }
         }, { onlyOnce: true });
       } catch (error) {
@@ -234,6 +274,9 @@ const App: React.FC = () => {
         const catArray = Object.values(data) as Category[];
         setCategories(catArray);
         localStorage.setItem('drona_categories', JSON.stringify(catArray));
+      } else {
+        setCategories([]);
+        localStorage.setItem('drona_categories', JSON.stringify([]));
       }
     });
 
@@ -247,6 +290,9 @@ const App: React.FC = () => {
         console.log("App.tsx - Setting menuItems state with", itemArray.length, "items");
         setMenuItems(itemArray);
         localStorage.setItem('drona_menu_items', JSON.stringify(itemArray));
+      } else {
+        setMenuItems([]);
+        localStorage.setItem('drona_menu_items', JSON.stringify([]));
       }
     });
 
@@ -289,6 +335,9 @@ const App: React.FC = () => {
         const tableArray = Object.values(data) as Table[];
         setTables(tableArray);
         localStorage.setItem('drona_tables', JSON.stringify(tableArray));
+      } else {
+        setTables([]);
+        localStorage.setItem('drona_tables', JSON.stringify([]));
       }
     });
 
@@ -810,6 +859,40 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden text-sm select-none">
+      {showOnboarding && !isMobileRoute && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[60]" />
+          <div className="fixed right-4 bottom-4 w-[360px] max-w-[92vw] bg-white rounded-2xl shadow-2xl border-2 border-orange-100 z-[70] p-5">
+            <div className="text-[11px] font-black uppercase tracking-wider text-orange-600">
+              Setup Guide {onboardingStep + 1}/{ONBOARDING_STEPS.length}
+            </div>
+            <h3 className="text-lg font-black text-gray-900 mt-1">
+              {ONBOARDING_STEPS[onboardingStep].title}
+            </h3>
+            <p className="text-sm text-gray-700 font-medium mt-2 leading-relaxed">
+              {ONBOARDING_STEPS[onboardingStep].message}
+            </p>
+            <div className="mt-3 text-xs font-black text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+              Indication: {ONBOARDING_STEPS[onboardingStep].indicator}
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                onClick={handleOnboardingSkip}
+                className="text-sm font-black text-gray-500 hover:text-gray-700"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleOnboardingNext}
+                className="bg-[#F57C00] text-white px-4 py-2 rounded-lg font-black text-sm hover:bg-orange-600 transition-colors"
+              >
+                {onboardingStep === ONBOARDING_STEPS.length - 1 ? 'Finish' : 'Next'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity" 
