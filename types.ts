@@ -3,12 +3,19 @@ export type OrderStatus = 'PLACED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANC
 export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'DUE' | 'PART';
 export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
 
+export interface Floor {
+  id: string;
+  name: string;
+  sortOrder?: number;
+}
+
 export interface Table {
   id: string;
   name: string;
   status: TableStatus;
   currentOrderId?: string;
   capacity?: number;
+  floorId?: string;
 }
 
 export interface RestaurantInfo {
@@ -29,11 +36,13 @@ export interface MenuItem {
   vegPrice?: number;
   nonVegPrice?: number;
   image?: string;
+  quantityStr?: string;
 }
 
 export interface Category {
   id: string;
   name: string;
+  type?: 'FOOD' | 'DRINK';
 }
 
 export interface Addon {

@@ -6,15 +6,17 @@ interface MenuManagementProps {
   categories: Category[];
   menuItems: MenuItem[];
   taxRate: number;
+  drinkTaxRate: number;
   restaurantInfo: RestaurantInfo;
   tables: Table[];
   addons: Addon[];
   setTaxRate: (rate: number) => void;
+  setDrinkTaxRate: (rate: number) => void;
   setRestaurantInfo: (info: RestaurantInfo) => void;
   onAddMenuItem: (item: Omit<MenuItem, 'id'>) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
   onDeleteMenuItem: (id: string) => void;
-  onAddCategory: (name: string) => void;
+  onAddCategory: (name: string, type?: 'FOOD' | 'DRINK') => void;
   onUpdateCategory: (cat: Category) => void;
   onDeleteCategory: (id: string) => void;
   onAddTable: (name: string) => void;
@@ -29,10 +31,12 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   categories, 
   menuItems, 
   taxRate,
+  drinkTaxRate,
   restaurantInfo,
   tables,
   addons,
   setTaxRate,
+  setDrinkTaxRate,
   setRestaurantInfo,
   onAddMenuItem, 
   onUpdateMenuItem, 
@@ -47,9 +51,16 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   onDeleteAddon,
   onResetMenuDatabase
 }) => {
-  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'ADDONS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
+  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'ADDONS' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
   const [searchTerm, setSearchTerm] = useState('');
   const [newTableName, setNewTableName] = useState('');
+  
+  const [isDrinkItemModalOpen, setIsDrinkItemModalOpen] = useState(false);
+  const [isDrinkCatModalOpen, setIsDrinkCatModalOpen] = useState(false);
+  const [editingDrinkItem, setEditingDrinkItem] = useState<MenuItem | null>(null);
+  const [editingDrinkCat, setEditingDrinkCat] = useState<Category | null>(null);
+  const drinkCategories = categories.filter(c => c.type === 'DRINK');
+  const drinkItems = menuItems.filter(i => drinkCategories.some(c => c.id === i.categoryId));
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
@@ -170,6 +181,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
         <div className="flex border-b overflow-x-auto custom-scrollbar bg-gray-50/50">
           <TabItem label="Menu Items" active={activeTab === 'ITEMS'} onClick={() => setActiveTab('ITEMS')} icon={<Utensils size={18} />} />
           <TabItem label="Categories" active={activeTab === 'CATEGORIES'} onClick={() => setActiveTab('CATEGORIES')} icon={<Tag size={18} />} />
+          <TabItem label="Drinks" active={activeTab === 'DRINKS'} onClick={() => setActiveTab('DRINKS')} icon={<Utensils size={18} />} />
           <TabItem label="Addons" active={activeTab === 'ADDONS'} onClick={() => setActiveTab('ADDONS')} icon={<Package size={18} />} />
           <TabItem label="Tables" active={activeTab === 'TABLES'} onClick={() => setActiveTab('TABLES')} icon={<LayoutGrid size={18} />} />
           <TabItem label="Taxes & Charges" active={activeTab === 'TAXES'} onClick={() => setActiveTab('TAXES')} icon={<Percent size={18} />} />
@@ -242,13 +254,62 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {categories.map(cat => (
                 <div key={cat.id} className="p-6 border-2 border-gray-200 bg-white rounded-2xl flex items-center justify-between hover:bg-orange-50/30 hover:border-[#F57C00] transition-colors group shadow-sm">
-                  <span className="font-black text-gray-900">{cat.name}</span>
+                  <div className="flex flex-col">
+                    <span className="font-black text-gray-900">{cat.name}</span>
+                    <span className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">{cat.type === 'DRINK' ? 'Drink' : 'Food'}</span>
+                  </div>
                   <div className="flex gap-1">
                     <button onClick={() => handleOpenCatModal(cat)} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={16} /></button>
                     <button onClick={() => onDeleteCategory(cat.id)} className="p-2 text-gray-900 hover:text-black"><Trash2 size={16} /></button>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {activeTab === 'DRINKS' && (
+            <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar flex-1 pb-20">
+              <div className="flex gap-4 mb-4">
+                <button onClick={() => { setEditingDrinkItem(null); setItemCategoryId(drinkCategories.length > 0 ? drinkCategories[0].id : ''); setIsDrinkItemModalOpen(true); }} className="bg-[#F57C00] text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"><Plus size={20} /> Add Drink Item</button>
+                <button onClick={() => { setEditingDrinkCat(null); setIsDrinkCatModalOpen(true); }} className="bg-white text-[#F57C00] border-2 border-[#F57C00] px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-orange-50 transition-all shadow-sm active:scale-95"><Plus size={20} /> Add Drink Category</button>
+              </div>
+              
+              <div>
+                <h3 className="text-xl font-black text-gray-900 mb-4 border-b-2 pb-2">Drink Categories</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {drinkCategories.map(cat => (
+                    <div key={cat.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl flex justify-between items-center group hover:border-[#F57C00] transition-colors shadow-sm">
+                      <span className="font-black text-gray-900">{cat.name}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => { setEditingDrinkCat(cat); setIsDrinkCatModalOpen(true); }} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={16} /></button>
+                        <button onClick={() => onDeleteCategory(cat.id)} className="p-2 text-gray-900 hover:text-black"><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-black text-gray-900 mt-6 mb-4 border-b-2 pb-2">Drink Items</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {drinkItems.map(item => (
+                    <div key={item.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl group hover:border-[#F57C00] transition-colors shadow-sm">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-black text-gray-900">{item.name}</h4>
+                          {item.quantityStr && <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>}
+                          <span className="text-xs text-gray-400 block mt-1">{categories.find(c => c.id === item.categoryId)?.name}</span>
+                        </div>
+                        <span className="font-black text-[#F57C00]">₹{item.price}</span>
+                      </div>
+                      <div className="flex justify-end gap-1 mt-4">
+                        <button onClick={() => { setEditingDrinkItem(item); setItemCategoryId(item.categoryId); setIsDrinkItemModalOpen(true); }} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
+                        <button onClick={() => onDeleteMenuItem(item.id)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -404,9 +465,24 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                      <span className="p-4 font-black text-gray-900 bg-gray-50 rounded-xl border-2 border-gray-300">%</span>
                    </div>
                  </div>
+                 <div>
+                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Drinks VAT (Integrated)</label>
+                   <div className="flex gap-4">
+                     <input 
+                      type="number" 
+                      value={drinkTaxRate * 100} 
+                      onChange={(e) => setDrinkTaxRate(parseFloat(e.target.value) / 100)}
+                      className="flex-1 p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                     />
+                     <span className="p-4 font-black text-gray-900 bg-gray-50 rounded-xl border-2 border-gray-300">%</span>
+                   </div>
+                 </div>
                  <button 
                    type="button"
-                   onClick={() => setTaxRate(taxRate)}
+                   onClick={() => {
+                     setTaxRate(taxRate);
+                     setDrinkTaxRate(drinkTaxRate);
+                   }}
                    className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95"
                  >
                    <Save size={20} /> Save Settings
@@ -784,10 +860,11 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const name = formData.get('catName') as string;
+                const type = formData.get('catType') as 'FOOD' | 'DRINK';
                 if (editingCat) {
-                  onUpdateCategory({ ...editingCat, name });
+                  onUpdateCategory({ ...editingCat, name, type });
                 } else {
-                  onAddCategory(name);
+                  onAddCategory(name, type);
                 }
                 setIsCatModalOpen(false);
               }}
@@ -802,8 +879,114 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                   className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
                 />
               </div>
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category Type</label>
+                <select 
+                  name="catType"
+                  defaultValue={editingCat?.type || 'FOOD'}
+                  className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner appearance-none cursor-pointer"
+                >
+                  <option value="FOOD">Food</option>
+                  <option value="DRINK">Drink</option>
+                </select>
+              </div>
               <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
                 {editingCat ? 'Update Category' : 'Create Category'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DRINK CATEGORY MODAL */}
+      {isDrinkCatModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border-2 border-gray-100">
+            <div className="bg-gray-50 p-6 border-b-2 border-gray-200 flex justify-between items-center">
+              <h3 className="text-2xl font-black text-gray-900">{editingDrinkCat ? 'Edit' : 'Add'} Drink Category</h3>
+              <button onClick={() => setIsDrinkCatModalOpen(false)} className="text-gray-900 hover:text-[#F57C00] transition-colors"><X size={28} /></button>
+            </div>
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const name = formData.get('catName') as string;
+                if (editingDrinkCat) {
+                  onUpdateCategory({ ...editingDrinkCat, name, type: 'DRINK' });
+                } else {
+                  onAddCategory(name, 'DRINK');
+                }
+                setIsDrinkCatModalOpen(false);
+              }}
+              className="p-6 space-y-5"
+            >
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category Name</label>
+                <input name="catName" defaultValue={editingDrinkCat?.name} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+              <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
+                {editingDrinkCat ? 'Update Category' : 'Create Category'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DRINK ITEM MODAL */}
+      {isDrinkItemModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border-2 border-gray-100">
+            <div className="bg-gray-50 p-6 border-b-2 border-gray-200 flex justify-between items-center">
+              <h3 className="text-2xl font-black text-gray-900">{editingDrinkItem ? 'Edit' : 'Add'} Drink</h3>
+              <button onClick={() => setIsDrinkItemModalOpen(false)} className="text-gray-900 hover:text-[#F57C00] transition-colors"><X size={28} /></button>
+            </div>
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const name = formData.get('name') as string;
+                const price = parseFloat(formData.get('price') as string);
+                const quantityStr = formData.get('quantityStr') as string;
+                const categoryId = itemCategoryId;
+                
+                if (!categoryId) { alert('Please select or create a drink category first.'); return; }
+                
+                const drinkData = { 
+                  name, price, quantityStr, categoryId, isVeg: true, vegType: 'VEG' as const
+                };
+
+                if (editingDrinkItem) onUpdateMenuItem({ ...editingDrinkItem, ...drinkData });
+                else onAddMenuItem(drinkData);
+                
+                setIsDrinkItemModalOpen(false);
+              }}
+              className="p-6 space-y-5 max-h-[80vh] overflow-y-auto custom-scrollbar"
+            >
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Drink Name</label>
+                <input name="name" defaultValue={editingDrinkItem?.name} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Quantity (e.g. 300ml, 1 Pint)</label>
+                <input name="quantityStr" defaultValue={editingDrinkItem?.quantityStr} className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Price (₹)</label>
+                <input name="price" type="number" defaultValue={editingDrinkItem?.price} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category</label>
+                <select value={itemCategoryId} onChange={(e) => setItemCategoryId(e.target.value)} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner appearance-none cursor-pointer">
+                  <option value="" disabled>Select Drink Category</option>
+                  {drinkCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                </select>
+              </div>
+
+              <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
+                {editingDrinkItem ? 'Update Drink' : 'Save Drink'}
               </button>
             </form>
           </div>

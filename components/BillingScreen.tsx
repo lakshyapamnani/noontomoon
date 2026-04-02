@@ -16,10 +16,12 @@ import {
   CheckCircle,
   User,
   Users,
+  ArrowLeft,
   X
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Addon, SelectedAddon } from '../types';
+import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Addon, SelectedAddon, Floor } from '../types';
+import TablesGrid from './TablesGrid';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
 
@@ -175,43 +177,67 @@ interface BillingScreenProps {
   categories: Category[];
   menuItems: MenuItem[];
   taxRate: number;
+  drinkTaxRate: number;
   restaurantInfo: RestaurantInfo;
   tables: Table[];
+  floors?: Floor[];
   tableCarts: Record<string, TableCart>;
   addons: Addon[];
   onCreateOrder: (order: Order) => void;
   onUpdateTableStatus: (tableId: string, status: Table['status'], currentOrderId?: string) => void;
   onUpdateTableCarts: (tableCarts: Record<string, TableCart>) => void;
+  selectedTableId?: string | null;
+  onBackToTables?: () => void;
+  variant?: 'desktop' | 'mobile';
 }
 
 const BillingScreen: React.FC<BillingScreenProps> = ({ 
   categories, 
   menuItems, 
   taxRate, 
+  drinkTaxRate,
   restaurantInfo, 
   tables,
+  floors = [],
   tableCarts,
   addons,
   onCreateOrder,
   onUpdateTableStatus,
-  onUpdateTableCarts
+  onUpdateTableCarts,
+  selectedTableId: selectedTableIdProp = null,
+  onBackToTables,
+  variant = 'desktop',
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || '');
-  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(selectedTableIdProp ?? null);
   const [orderType, setOrderType] = useState<OrderType>('PICK_UP');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
   const [optionsItem, setOptionsItem] = useState<MenuItem | null>(null);
+  const [menuType, setMenuType] = useState<'FOOD' | 'DRINK'>('FOOD');
   
+  const filteredCategories = useMemo(() => {
+    return categories.filter(cat => 
+      menuType === 'DRINK' ? cat.type === 'DRINK' : (!cat.type || cat.type === 'FOOD')
+    );
+  }, [categories, menuType]);
+
   // Ensure selectedCategoryId is always valid when categories change
   useEffect(() => {
-    if (categories.length > 0) {
-      // If current selection is empty or doesn't exist in categories, select the first one
-      const categoryExists = categories.some(cat => cat.id === selectedCategoryId);
+    if (filteredCategories.length > 0) {
+      // If current selection is empty or doesn't exist in filtered categories, select the first one
+      const categoryExists = filteredCategories.some(cat => cat.id === selectedCategoryId);
       if (!selectedCategoryId || !categoryExists) {
-        setSelectedCategoryId(categories[0].id);
+        setSelectedCategoryId(filteredCategories[0].id);
       }
     }
-  }, [categories, selectedCategoryId]);
+  }, [filteredCategories, selectedCategoryId]);
+
+  // Desktop mode is controlled from the tables screen.
+  useEffect(() => {
+    if (variant !== 'desktop') return;
+    setSelectedTableId(selectedTableIdProp ?? null);
+    setOrderType(selectedTableIdProp ? 'DINE_IN' : 'PICK_UP');
+  }, [variant, selectedTableIdProp]);
   
   // Get current cart based on selected table or default cart for non-dine-in
   const [defaultCart, setDefaultCart] = useState<CartItem[]>([]);
@@ -398,8 +424,18 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }
   };
 
-  const subtotal = currentCart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-  const tax = subtotal * taxRate;
+  const foodSubtotal = currentCart.reduce((acc, item) => {
+    const isDrink = categories.find(c => c.id === item.categoryId)?.type === 'DRINK';
+    return !isDrink ? acc + (item.price * item.quantity) : acc;
+  }, 0);
+
+  const drinkSubtotal = currentCart.reduce((acc, item) => {
+    const isDrink = categories.find(c => c.id === item.categoryId)?.type === 'DRINK';
+    return isDrink ? acc + (item.price * item.quantity) : acc;
+  }, 0);
+
+  const subtotal = foodSubtotal + drinkSubtotal;
+  const tax = (foodSubtotal * taxRate) + (drinkSubtotal * drinkTaxRate);
   const total = subtotal + tax;
 
   const printReceipt = (order: Order) => {
@@ -463,7 +499,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           `).join('')}
           <div class="line"></div>
           <div class="item-row"><span>Subtotal:</span><span>₹${order.subtotal.toFixed(0)}</span></div>
-          <div class="item-row"><span>Tax (${(taxRate * 100).toFixed(0)}%):</span><span>₹${order.tax.toFixed(0)}</span></div>
+          <div class="item-row"><span>Tax:</span><span>₹${order.tax.toFixed(0)}</span></div>
           <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center">Paid via ${order.paymentMode}</div>
@@ -531,6 +567,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       onUpdateTableCarts(updatedCarts);
       onUpdateTableStatus(selectedTableId, 'AVAILABLE');
       setSelectedTableId(null);
+      if (variant === 'desktop') onBackToTables?.();
     } else {
       setDefaultCart([]);
       setDefaultCustomerName('');
@@ -540,6 +577,361 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const getTableItemCount = (tableId: string) => {
     return tableCarts[tableId]?.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
   };
+
+  if (variant === 'mobile') {
+    const selectedTable = selectedTableId ? tables.find(t => t.id === selectedTableId) : undefined;
+
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-gray-100">
+        {/* Item Options Popup (Veg/Non-Veg + Addons) */}
+        {optionsItem && (
+          <ItemOptionsPopup
+            item={optionsItem}
+            categoryAddons={getCategoryAddons(optionsItem.categoryId)}
+            onConfirm={handleItemOptions}
+            onClose={() => setOptionsItem(null)}
+          />
+        )}
+
+        {!selectedTableId ? (
+          <>
+            <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <Users size={20} className="text-[#F57C00]" />
+                <span className="text-sm font-black text-gray-700 uppercase tracking-wider">Tables</span>
+              </div>
+            </div>
+
+            <TablesGrid
+              tables={tables}
+              floors={floors}
+              tableCarts={tableCarts}
+              selectedTableId={selectedTableId}
+              onSelectTable={(tableId) => {
+                setSelectedTableId(tableId);
+                setOrderType('DINE_IN');
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTableId(null);
+                    setOrderType('PICK_UP');
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl font-black text-xs transition-all border border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  <ArrowLeft size={14} />
+                  Tables
+                </button>
+
+                <div className="flex-1 text-center min-w-0">
+                  <div className="text-sm font-black text-gray-900 truncate">
+                    {selectedTable?.name || 'Table'}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-0.5">
+                    Active Order
+                  </div>
+                </div>
+
+                <div className="w-[70px]" />
+              </div>
+
+              {/* Menu Type Toggle */}
+              <div className="mt-3 flex gap-2 px-1">
+                <button
+                  type="button"
+                  onClick={() => setMenuType('FOOD')}
+                  className={`flex-1 py-2 rounded-xl font-black text-xs transition-all border ${
+                    menuType === 'FOOD' ? 'bg-orange-100 text-[#F57C00] border-[#F57C00]' : 'bg-white text-gray-700 border-gray-200 hover:border-orange-200'
+                  }`}
+                >
+                  FOOD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMenuType('DRINK')}
+                  className={`flex-1 py-2 rounded-xl font-black text-xs transition-all border ${
+                    menuType === 'DRINK' ? 'bg-orange-100 text-[#F57C00] border-[#F57C00]' : 'bg-white text-gray-700 border-gray-200 hover:border-orange-200'
+                  }`}
+                >
+                  DRINKS
+                </button>
+              </div>
+
+              {/* Category horizontal scroller */}
+              <div className="mt-3">
+                <div className="flex overflow-x-auto custom-scrollbar gap-2 pb-1">
+                  {filteredCategories.map(cat => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategoryId(cat.id)}
+                      className={`px-3 py-2 rounded-full font-black text-xs transition-all whitespace-nowrap border ${
+                        selectedCategoryId === cat.id
+                          ? 'bg-orange-50 border-[#F57C00] text-[#F57C00]'
+                          : 'bg-white border-gray-200 text-gray-700 hover:border-orange-200'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Items + Cart */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <div className="flex-1 overflow-y-auto custom-scrollbar bg-gray-50 p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {filteredItems.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleAddItem(item)}
+                      className="bg-white rounded-2xl shadow-sm border-2 border-transparent hover:border-[#F57C00] hover:shadow-lg transition-all p-3 text-left relative group flex flex-col min-h-[108px]"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        {item.vegType === 'BOTH' ? (
+                          <span
+                            className="w-4 h-4 rounded-full border-2 p-[2px]"
+                            style={{
+                              borderImage: 'linear-gradient(90deg, #16a34a 50%, #dc2626 50%) 1',
+                            }}
+                          >
+                            <div
+                              className="w-full h-full rounded-full"
+                              style={{ background: 'linear-gradient(90deg, #16a34a 50%, #dc2626 50%)' }}
+                            />
+                          </span>
+                        ) : (
+                          <span
+                            className={`w-4 h-4 rounded-full border-2 ${
+                              item.vegType === 'VEG' || item.isVeg
+                                ? 'border-green-600 p-[2px]'
+                                : 'border-red-600 p-[2px]'
+                            }`}
+                          >
+                            <div
+                              className={`w-full h-full rounded-full ${
+                                item.vegType === 'VEG' || item.isVeg ? 'bg-green-600' : 'bg-red-600'
+                              }`}
+                            />
+                          </span>
+                        )}
+
+                        <span className="text-[12px] font-black text-gray-900 group-hover:text-[#F57C00]">
+                          {item.vegType === 'BOTH'
+                            ? `V:₹${item.vegPrice}`
+                            : `₹${item.price}`}
+                        </span>
+                      </div>
+
+                      <h3 className="font-bold text-gray-800 text-xs line-clamp-2 flex-1">
+                        {item.name}
+                      </h3>
+
+                      <div className="mt-2 flex justify-end">
+                        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-[#F57C00] group-hover:text-white transition-all shadow-sm">
+                          <Plus size={16} />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+
+                  {filteredItems.length === 0 && (
+                    <div className="col-span-2 text-center py-10 text-gray-400 font-bold text-sm">
+                      No items in this category
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Cart / Checkout */}
+              <div className="w-full bg-white border-t shadow-2xl flex flex-col shrink-0 max-h-[42vh]">
+                {/* Table indicator for Dine In */}
+                {orderType === 'DINE_IN' && selectedTableId && (
+                  <div className="px-3 py-2 bg-[#F57C00] text-white text-center">
+                    <span className="font-black text-sm">
+                      {tables.find(t => t.id === selectedTableId)?.name || 'Table'} - Active Order
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex p-3 bg-gray-100 border-b gap-1">
+                  <OrderTypeTab
+                    active={orderType === 'DINE_IN'}
+                    onClick={() => setOrderType('DINE_IN')}
+                    label="Dine In"
+                    icon={<UtensilsCrossed size={16} />}
+                  />
+                  <OrderTypeTab
+                    active={orderType === 'DELIVERY'}
+                    onClick={() => setOrderType('DELIVERY')}
+                    label="Delivery"
+                    icon={<Truck size={16} />}
+                  />
+                  <OrderTypeTab
+                    active={orderType === 'PICK_UP'}
+                    onClick={() => setOrderType('PICK_UP')}
+                    label="Pick Up"
+                    icon={<Package size={16} />}
+                  />
+                </div>
+
+                <div className="p-4 border-b bg-white">
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input
+                      type="text"
+                      placeholder="Customer Name / Order Note"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-[#F57C00] outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+                  {currentCart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-40">
+                      <ShoppingBag size={64} strokeWidth={1} className="mb-3" />
+                      <p className="font-bold text-lg">No Items Added</p>
+                      {orderType === 'DINE_IN' && !selectedTableId && (
+                        <p className="text-sm mt-2">Select a table to start</p>
+                      )}
+                    </div>
+                  ) : (
+                    currentCart.map(item => (
+                      <div
+                        key={item.id}
+                        className="flex gap-3 items-center group animate-in fade-in slide-in-from-right-2 duration-200"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`shrink-0 w-2 h-2 rounded-full ${
+                                item.isVeg || item.selectedVegChoice === 'VEG' ? 'bg-green-500' : 'bg-red-500'
+                              }`}
+                            />
+                            <h4 className="font-bold text-gray-800 truncate text-sm">
+                              {item.name}
+                              {item.selectedVegChoice && (
+                                <span
+                                  className={`ml-1 text-[10px] font-black ${
+                                    item.selectedVegChoice === 'VEG' ? 'text-green-600' : 'text-red-600'
+                                  }`}
+                                >
+                                  ({item.selectedVegChoice === 'VEG' ? 'V' : 'NV'})
+                                </span>
+                              )}
+                            </h4>
+                          </div>
+                          {item.selectedAddons && item.selectedAddons.length > 0 && (
+                            <p className="text-[10px] text-orange-600 font-bold">
+                              + {item.selectedAddons.map(a => a.name).join(', ')}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-gray-500 font-medium">₹{item.price} per unit</p>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1 shadow-sm">
+                          <button
+                            onClick={() => updateQuantity(item.id, -1)}
+                            className="p-1 hover:text-[#F57C00] text-gray-400"
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className="w-8 text-center font-black text-sm text-gray-900">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.id, 1)}
+                            className="p-1 hover:text-[#F57C00] text-gray-400"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+
+                        <div className="w-16 text-right font-black text-sm text-gray-900">
+                          ₹{item.price * item.quantity}
+                        </div>
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="text-gray-200 hover:text-black transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="p-5 border-t bg-gray-50 space-y-5 rounded-t-3xl shadow-top">
+                  <div className="space-y-1.5 text-xs font-bold uppercase tracking-wider">
+                    <div className="flex justify-between text-gray-400">
+                      <span>Subtotal</span>
+                      <span>₹{subtotal.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-400">
+                      <span>Tax (GST)</span>
+                      <span>₹{tax.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-2xl font-black text-gray-900 border-t-2 border-dashed border-gray-200 pt-3 mt-3">
+                      <span>Total</span>
+                      <span className="text-[#F57C00]">₹{total.toFixed(0)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <PaymentTab
+                      active={paymentMode === 'CASH'}
+                      onClick={() => setPaymentMode('CASH')}
+                      icon={<Banknote size={18} />}
+                      label="Cash"
+                    />
+                    <PaymentTab
+                      active={paymentMode === 'CARD'}
+                      onClick={() => setPaymentMode('CARD')}
+                      icon={<CreditCard size={18} />}
+                      label="Card"
+                    />
+                    <PaymentTab
+                      active={paymentMode === 'UPI'}
+                      onClick={() => setPaymentMode('UPI')}
+                      icon={<Smartphone size={18} />}
+                      label="UPI"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handlePlaceOrder(false)}
+                      className="flex items-center justify-center gap-2 bg-[#262626] text-white py-4 rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-200"
+                    >
+                      <ShoppingCart size={20} /> Checkout
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePlaceOrder(true)}
+                      className="flex items-center justify-center gap-2 bg-[#F57C00] text-white py-4 rounded-2xl font-black hover:bg-orange-600 transition-all active:scale-95 shadow-lg shadow-orange-200"
+                    >
+                      <CheckCircle size={20} /> Print & Bill
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -552,9 +944,40 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           onClose={() => setOptionsItem(null)}
         />
       )}
-      
-      {/* Table Selection Bar */}
-      <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
+
+      {variant === 'desktop' && (
+        <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => onBackToTables?.()}
+              disabled={!onBackToTables}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl font-black text-xs transition-all border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ArrowLeft size={14} />
+              Tables
+            </button>
+
+            <div className="flex-1 text-center">
+              <div className="text-sm font-black text-gray-900">
+                {selectedTableId
+                  ? tables.find(t => t.id === selectedTableId)?.name || 'Table'
+                  : 'Select Table'}
+              </div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-0.5">
+                Billing
+              </div>
+            </div>
+
+            <div className="w-[90px]" />
+          </div>
+        </div>
+      )}
+
+      {variant !== 'desktop' && (
+        <>
+          {/* Table Selection Bar */}
+          <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
         <div className="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-1">
           <div className="flex items-center gap-2 shrink-0">
             <Users size={20} className="text-[#F57C00]" />
@@ -602,11 +1025,31 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           )}
         </div>
       </div>
+        </>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <div className="w-32 md:w-48 bg-white border-r flex flex-col shrink-0 shadow-sm z-20">
+          <div className="p-3 border-b flex flex-col gap-2">
+            <button
+              onClick={() => setMenuType('FOOD')}
+              className={`w-full py-2 rounded-lg font-black text-xs transition-all border ${
+                menuType === 'FOOD' ? 'bg-orange-100 text-[#F57C00] border-[#F57C00]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              FOOD
+            </button>
+            <button
+              onClick={() => setMenuType('DRINK')}
+              className={`w-full py-2 rounded-lg font-black text-xs transition-all border ${
+                menuType === 'DRINK' ? 'bg-orange-100 text-[#F57C00] border-[#F57C00]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              DRINKS
+            </button>
+          </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {categories.map(cat => (
+            {filteredCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategoryId(cat.id)}
@@ -744,7 +1187,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               <span>₹{subtotal.toFixed(0)}</span>
             </div>
             <div className="flex justify-between text-gray-400">
-              <span>Tax (GST ${(taxRate * 100).toFixed(0)}%)</span>
+              <span>Tax (GST)</span>
               <span>₹{tax.toFixed(0)}</span>
             </div>
             <div className="flex justify-between text-2xl font-black text-gray-900 border-t-2 border-dashed border-gray-200 pt-3 mt-3">

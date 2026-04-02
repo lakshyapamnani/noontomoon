@@ -23,7 +23,7 @@ import {
   Smartphone,
   Trash2
 } from 'lucide-react';
-import { Order, OrderStatus, RestaurantInfo, CartItem } from '../types';
+import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
 
 const formatItemDisplay = (it: CartItem) => {
   const base = `${it.name} x ${it.quantity}`;
@@ -40,12 +40,15 @@ interface OrdersListProps {
   onDeleteOrder: (id: string) => void;
   restaurantInfo: RestaurantInfo;
   taxRate: number;
+  categories?: Category[];
 }
 
-const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate }) => {
+const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, categories = [] }) => {
   const isAllBillsView = title === "All Bills";
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ALL'>('TODAY');
+  const [kotCategoryId, setKotCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentMode | 'ALL'>('ALL');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   
   // Ensure orders is always an array
@@ -75,14 +78,18 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
     const list = isAllBillsView 
       ? (activeTab === 'TODAY' ? todayOrders : allOrders) 
       : safeOrders;
+      
+    const paymentFiltered = isAllBillsView && paymentFilter !== 'ALL'
+      ? list.filter(o => o.paymentMode === paymentFilter)
+      : list;
     
-    if (!searchQuery.trim()) return list;
+    if (!searchQuery.trim()) return paymentFiltered;
     
-    return list.filter(o => 
+    return paymentFiltered.filter(o => 
       o.billNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
       o.customerName?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery]);
+  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery, paymentFilter]);
 
   // Calculate total sale for displayed orders
   const totalSale = useMemo(() => {
@@ -244,6 +251,137 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
     printWindow.document.close();
   };
 
+  const exportKOTSummary = (data: Order[], subTitle: string, categoryFilter: 'all' | string) => {
+    if (!data || data.length === 0) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const categoryMap: Record<string, { name: string; items: Record<string, { name: string; qty: number; total: number }> }> = {};
+
+    const categoryNameById: Record<string, string> = {};
+    categories.forEach(cat => {
+      categoryNameById[cat.id] = cat.name;
+    });
+
+    data.forEach(order => {
+      (order.items || []).forEach(it => {
+        const catId = it.categoryId || 'uncategorized';
+        if (categoryFilter !== 'all' && catId !== categoryFilter) return;
+
+        const catName = categoryNameById[catId] || (catId === 'uncategorized' ? 'Other' : 'Other');
+        if (!categoryMap[catId]) {
+          categoryMap[catId] = { name: catName, items: {} };
+        }
+        const key = it.name;
+        if (!categoryMap[catId].items[key]) {
+          categoryMap[catId].items[key] = { name: it.name, qty: 0, total: 0 };
+        }
+        categoryMap[catId].items[key].qty += it.quantity;
+        categoryMap[catId].items[key].total += it.price * it.quantity;
+      });
+    });
+
+    const filterLabel =
+      categoryFilter === 'all'
+        ? 'ALL CATEGORIES'
+        : (categoryNameById[categoryFilter] || 'CATEGORY').toUpperCase();
+
+    const orderedSections: { id: string; data: { name: string; items: Record<string, { name: string; qty: number; total: number }> } }[] = [];
+    const seen = new Set<string>();
+    if (categoryFilter === 'all') {
+      for (const cat of categories) {
+        if (categoryMap[cat.id]) {
+          orderedSections.push({ id: cat.id, data: categoryMap[cat.id] });
+          seen.add(cat.id);
+        }
+      }
+      for (const id of Object.keys(categoryMap)) {
+        if (!seen.has(id)) orderedSections.push({ id, data: categoryMap[id] });
+      }
+    } else if (categoryMap[categoryFilter]) {
+      orderedSections.push({ id: categoryFilter, data: categoryMap[categoryFilter] });
+    }
+
+    const sectionHtml = orderedSections
+      .map(({ data: cat }) => {
+        const rows = Object.values(cat.items).sort((a, b) => a.name.localeCompare(b.name));
+        if (!rows.length) return '';
+        const catTotal = rows.reduce((sum, r) => sum + r.total, 0);
+        return `
+          <div class="cat-title center">${cat.name.toUpperCase()}</div>
+          <div class="line"></div>
+          <div class="row bold">
+            <span class="name">ITEM</span>
+            <span class="qty">QTY</span>
+            <span class="amt">AMT</span>
+          </div>
+          ${rows
+            .map(
+              r => `
+          <div class="row">
+            <span class="name">${r.name}</span>
+            <span class="qty">${r.qty}</span>
+            <span class="amt">${r.total.toFixed(0)}</span>
+          </div>`
+            )
+            .join('')}
+          <div class="line"></div>
+          <div class="row bold">
+            <span class="name">CAT TTL</span>
+            <span class="qty"></span>
+            <span class="amt">₹${catTotal.toFixed(0)}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    const html = `
+      <html>
+        <head>
+          <title>KOT Summary - ${subTitle}</title>
+          <style>
+            @page { size: 58mm auto; margin: 0; }
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              width: 48mm;
+              max-width: 48mm;
+              margin: 0 auto;
+              padding: 6px;
+              font-size: 10px;
+              color: #000;
+              line-height: 1.2;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .header-name { font-size: 11px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+            .sub { font-size: 9px; }
+            .cat-title { font-size: 10px; font-weight: bold; margin-top: 6px; }
+            .row { display: flex; justify-content: space-between; gap: 4px; margin: 2px 0; align-items: baseline; }
+            .name { flex: 1; min-width: 0; word-break: break-word; }
+            .qty { width: 22px; text-align: right; font-weight: bold; flex-shrink: 0; }
+            .amt { width: 36px; text-align: right; flex-shrink: 0; }
+          </style>
+        </head>
+        <body>
+          <div class="center header-name">${restaurantInfo.name}</div>
+          <div class="center sub">${restaurantInfo.address}</div>
+          <div class="line"></div>
+          <div class="center bold">KOT SUMMARY</div>
+          <div class="center sub">${subTitle} · ${filterLabel}</div>
+          <div class="center sub">${new Date().toLocaleString()}</div>
+          <div class="line"></div>
+          ${sectionHtml || '<div class="center sub">No items</div>'}
+          <div class="line"></div>
+          <div class="center sub" style="margin-top:6px;">End of summary</div>
+          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const renderTable = (data: Order[], emptyMessage: string = "No orders found.") => (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -351,7 +489,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                     )}
                     <ActionButton 
                       icon={<Trash2 size={16} />} 
-                      color="text-gray-400 hover:text-red-500" 
+                      color="text-red-500 hover:bg-red-50 border-red-100" 
                       tooltip="Delete Order" 
                       onClick={() => {
                         if (confirm(`Are you sure you want to delete order ${order.billNo}?`)) {
@@ -402,11 +540,24 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
               className="bg-white border rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#F57C00] outline-none w-full md:w-48 md:focus:w-64 transition-all"
              />
            </div>
+           {isAllBillsView && (
+             <select
+               value={paymentFilter}
+               onChange={(e) => setPaymentFilter(e.target.value as PaymentMode | 'ALL')}
+               className="bg-white border rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-[#F57C00] outline-none transition-all cursor-pointer"
+             >
+               <option value="ALL">All Payments</option>
+               <option value="CASH">Cash</option>
+               <option value="CARD">Card</option>
+               <option value="UPI">UPI</option>
+               <option value="DUE">Due</option>
+             </select>
+           )}
            <button 
             onClick={() => exportToPDF(displayedOrders, isAllBillsView ? (activeTab === 'TODAY' ? "Today" : "History") : title)}
             className="bg-[#F57C00] text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-black hover:bg-orange-600 transition-all flex items-center gap-1 md:gap-2 shadow-lg shadow-orange-100 active:scale-95 shrink-0"
            >
-             <FileText size={16} /> <span className="hidden sm:inline">Export</span>
+            <FileText size={16} /> <span className="hidden sm:inline">Export</span>
            </button>
         </div>
       </div>
@@ -443,6 +594,40 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             count={allOrders.length}
             icon={<History size={16} />}
           />
+        </div>
+      )}
+
+      {isAllBillsView && (
+        <div className="px-4 md:px-6 py-2 border-b bg-white flex flex-wrap items-center gap-2 shadow-sm">
+          <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider shrink-0">KOT (2&quot;)</span>
+          <select
+            value={kotCategoryId}
+            onChange={(e) => setKotCategoryId(e.target.value)}
+            className="flex-1 min-w-[160px] md:min-w-[200px] max-w-md border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 bg-gray-50 focus:ring-2 focus:ring-[#F57C00] outline-none"
+            aria-label="KOT category"
+          >
+            <option value="all">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() =>
+              exportKOTSummary(
+                displayedOrders,
+                activeTab === 'TODAY' ? 'Today' : 'History',
+                kotCategoryId as 'all' | string
+              )
+            }
+            disabled={displayedOrders.length === 0}
+            className="bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-black transition-all flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            <Printer size={16} />
+            Print KOT
+          </button>
         </div>
       )}
 
@@ -527,6 +712,17 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                       <CheckCircle size={14} />
                     </button>
                   )}
+                  <button 
+                    onClick={() => {
+                      if (confirm(`Are you sure you want to delete order ${order.billNo}?`)) {
+                        onDeleteOrder(order.id);
+                      }
+                    }}
+                    className="py-2 px-3 bg-red-50 text-red-500 border border-red-100 rounded-xl text-xs font-bold transition-colors hover:bg-red-100 shrink-0"
+                    title="Delete Order"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             ))
@@ -638,6 +834,18 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                   <PackageCheck size={20} /> Complete Order
                 </button>
               )}
+              <button 
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete order ${selectedOrder.billNo}?`)) {
+                    onDeleteOrder(selectedOrder.id);
+                    setSelectedOrder(null);
+                  }
+                }}
+                className="flex-shrink-0 bg-red-50 text-red-500 py-4 px-4 rounded-2xl font-black hover:bg-red-100 transition-all flex items-center justify-center gap-2 shadow-sm border border-red-100"
+                title="Delete Order"
+              >
+                <Trash2 size={20} />
+              </button>
             </div>
           </div>
         </div>

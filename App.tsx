@@ -22,6 +22,7 @@ import {
   Home,
   ClipboardList,
   PieChart,
+  LayoutGrid,
   TrendingUp
 } from 'lucide-react';
 import { 
@@ -31,7 +32,8 @@ import {
   OrderStatus, 
   RestaurantInfo,
   Table,
-  Addon
+  Addon,
+  Floor
 } from './types';
 import { 
   INITIAL_CATEGORIES, 
@@ -43,7 +45,7 @@ import Dashboard from './components/Dashboard';
 import OrdersList from './components/OrdersList';
 import Reports from './components/Reports';
 import MenuManagement from './components/MenuManagement';
-import AuthScreen from './components/AuthScreen';
+import TablesGrid from './components/TablesGrid';
 
 // Firebase imports
 import { db, auth } from './firebase';
@@ -51,6 +53,7 @@ import { ref, onValue, set, push, update } from 'firebase/database';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 
 type ActiveScreen = 
+  | 'TABLES'
   | 'BILLING' 
   | 'DASHBOARD' 
   | 'LIVE_ORDERS' 
@@ -89,7 +92,7 @@ const ONBOARDING_STEPS = [
 ] as const;
 
 const App: React.FC = () => {
-  const [activeScreen, setActiveScreen] = useState<ActiveScreen>('BILLING');
+  const [activeScreen, setActiveScreen] = useState<ActiveScreen>('TABLES');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   // Auth state
@@ -100,7 +103,7 @@ const App: React.FC = () => {
     const path = window.location.pathname.toLowerCase();
     return path === '/mobile' || path === '/mobile/' || path.startsWith('/mobile');
   });
-  const [mobileTab, setMobileTab] = useState<'analytics' | 'orders' | 'bills' | 'reports'>('analytics');
+  const [mobileTab, setMobileTab] = useState<'analytics' | 'orders' | 'bills' | 'reports' | 'billing' | 'tablesConfig'>('billing');
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
@@ -119,6 +122,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('drona_tables');
     return saved ? JSON.parse(saved) : [];
   });
+  const [floors, setFloors] = useState<Floor[]>(() => {
+    const saved = localStorage.getItem('drona_floors');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [addons, setAddons] = useState<Addon[]>(() => {
     const saved = localStorage.getItem('drona_addons');
     return saved ? JSON.parse(saved) : [];
@@ -127,9 +134,14 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('drona_table_carts');
     return saved ? JSON.parse(saved) : {};
   });
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [taxRate, setTaxRate] = useState(() => {
     const saved = localStorage.getItem('drona_tax_rate');
     return saved ? parseFloat(saved) : INITIAL_TAX_RATE;
+  });
+  const [drinkTaxRate, setDrinkTaxRate] = useState(() => {
+    const saved = localStorage.getItem('drona_drink_tax_rate');
+    return saved ? parseFloat(saved) : 0;
   });
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>(() => {
     const saved = localStorage.getItem('drona_restaurant_info');
@@ -181,6 +193,7 @@ const App: React.FC = () => {
       localStorage.removeItem('drona_categories');
       localStorage.removeItem('drona_menu_items');
       localStorage.removeItem('drona_tables');
+      localStorage.removeItem('drona_floors');
       localStorage.removeItem('drona_addons');
       localStorage.removeItem('drona_table_carts');
       localStorage.removeItem('drona_tax_rate');
@@ -234,12 +247,14 @@ const App: React.FC = () => {
           if (!snapshot.exists()) {
             const savedTax = localStorage.getItem('drona_tax_rate');
             const taxRateVal = savedTax ? parseFloat(savedTax) : INITIAL_TAX_RATE;
+            const savedDrinkTax = localStorage.getItem('drona_drink_tax_rate');
+            const drinkTaxRateVal = savedDrinkTax ? parseFloat(savedDrinkTax) : 0;
             const restaurantVal = { 
               name: user.displayName || 'DRONA POS CAFE', 
               phone: '+91 9876543210', 
               address: '123 Main Street, Food Park, City' 
             };
-            await set(settingsRef, { taxRate: taxRateVal, restaurantInfo: restaurantVal });
+            await set(settingsRef, { taxRate: taxRateVal, drinkTaxRate: drinkTaxRateVal, restaurantInfo: restaurantVal });
             console.log('Settings (taxes, restaurant) synced to Firebase');
           }
         }, { onlyOnce: true });
@@ -324,6 +339,10 @@ const App: React.FC = () => {
           setTaxRate(data.taxRate);
           localStorage.setItem('drona_tax_rate', data.taxRate.toString());
         }
+        if (data.drinkTaxRate !== undefined) {
+          setDrinkTaxRate(data.drinkTaxRate);
+          localStorage.setItem('drona_drink_tax_rate', data.drinkTaxRate.toString());
+        }
       }
     });
 
@@ -355,6 +374,19 @@ const App: React.FC = () => {
       }
     });
 
+    const floorsRef = ref(db, userPath('floors'));
+    const unsubscribeFloors = onValue(floorsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const floorArray = Object.values(data) as Floor[];
+        setFloors(floorArray);
+        localStorage.setItem('drona_floors', JSON.stringify(floorArray));
+      } else {
+        setFloors([]);
+        localStorage.setItem('drona_floors', JSON.stringify([]));
+      }
+    });
+
     // Table Carts Sync (for pending orders on tables)
     const tableCartsRef = ref(db, userPath('table_carts'));
     const unsubscribeTableCarts = onValue(tableCartsRef, (snapshot) => {
@@ -375,6 +407,7 @@ const App: React.FC = () => {
       unsubscribeSettings();
       unsubscribeTables();
       unsubscribeAddons();
+      unsubscribeFloors();
       unsubscribeTableCarts();
     };
   }, [user]);
@@ -415,18 +448,77 @@ const App: React.FC = () => {
   };
 
   // Table Handlers
-  const handleAddTable = async (tableName: string) => {
+  const handleAddTable = async (tableName: string, floorId?: string) => {
     const newId = Math.random().toString(36).substr(2, 9);
-    const newTable: Table = { id: newId, name: tableName, status: 'AVAILABLE' };
-    
+    const newTable: Table = {
+      id: newId,
+      name: tableName,
+      status: 'AVAILABLE',
+      ...(floorId ? { floorId } : {}),
+    };
+
     const updatedTables = [...tables, newTable];
     setTables(updatedTables);
     localStorage.setItem('drona_tables', JSON.stringify(updatedTables));
 
     try {
-      await set(ref(db, userPath(`tables/${newId}`)), newTable);
+      await set(ref(db, userPath(`tables/${newId}`)), JSON.parse(JSON.stringify(newTable)));
     } catch (error) {
       console.error("Firebase Sync Error (Add Table):", error);
+    }
+  };
+
+  const handleUpdateTable = async (updated: Table) => {
+    const updatedTables = tables.map(t => (t.id === updated.id ? updated : t));
+    setTables(updatedTables);
+    localStorage.setItem('drona_tables', JSON.stringify(updatedTables));
+    const clean: Record<string, unknown> = {
+      id: updated.id,
+      name: updated.name,
+      status: updated.status,
+    };
+    if (updated.capacity !== undefined) clean.capacity = updated.capacity;
+    if (updated.currentOrderId !== undefined) clean.currentOrderId = updated.currentOrderId;
+    if (updated.floorId) clean.floorId = updated.floorId;
+    else clean.floorId = null;
+    try {
+      await update(ref(db, userPath(`tables/${updated.id}`)), clean);
+    } catch (error) {
+      console.error("Firebase Sync Error (Update Table):", error);
+    }
+  };
+
+  const handleAddFloor = async (name: string) => {
+    const newId = Math.random().toString(36).substr(2, 9);
+    const floor: Floor = { id: newId, name: name.trim(), sortOrder: floors.length };
+    const next = [...floors, floor];
+    setFloors(next);
+    localStorage.setItem('drona_floors', JSON.stringify(next));
+    try {
+      await set(ref(db, userPath(`floors/${newId}`)), floor);
+    } catch (error) {
+      console.error("Firebase Sync Error (Add Floor):", error);
+    }
+  };
+
+  const handleDeleteFloor = async (floorId: string) => {
+    const next = floors.filter(f => f.id !== floorId);
+    setFloors(next);
+    localStorage.setItem('drona_floors', JSON.stringify(next));
+    const clearedTables = tables.map(t =>
+      t.floorId === floorId ? { ...t, floorId: undefined } : t
+    );
+    setTables(clearedTables);
+    localStorage.setItem('drona_tables', JSON.stringify(clearedTables));
+    try {
+      await set(ref(db, userPath(`floors/${floorId}`)), null);
+      for (const t of tables) {
+        if (t.floorId === floorId) {
+          await update(ref(db, userPath(`tables/${t.id}`)), { floorId: null });
+        }
+      }
+    } catch (error) {
+      console.error("Firebase Sync Error (Delete Floor):", error);
     }
   };
 
@@ -516,9 +608,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddCategory = async (name: string) => {
+  const handleAddCategory = async (name: string, type?: 'FOOD' | 'DRINK') => {
     const newId = Math.random().toString(36).substr(2, 9);
-    const newCat = { id: newId, name };
+    const newCat = { id: newId, name, type: type || 'FOOD' };
     try {
       await set(ref(db, userPath(`categories/${newId}`)), newCat);
     } catch (error) {
@@ -587,6 +679,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSaveDrinkTaxRate = async (newRate: number) => {
+    setDrinkTaxRate(newRate);
+    localStorage.setItem('drona_drink_tax_rate', newRate.toString());
+    try {
+      await update(ref(db, userPath('settings')), { drinkTaxRate: newRate });
+    } catch (error) {
+      console.error("Firebase Sync Error (Drink Tax):", error);
+    }
+  };
+
   const handleSaveRestaurantInfo = async (info: RestaurantInfo) => {
     setRestaurantInfo(info);
     try {
@@ -638,19 +740,39 @@ const App: React.FC = () => {
 
   const renderScreen = () => {
     switch (activeScreen) {
+      case 'TABLES':
+        return (
+          <TablesGrid
+            tables={tables}
+            floors={floors}
+            tableCarts={tableCarts}
+            selectedTableId={selectedTableId}
+            onSelectTable={(tableId) => {
+              setSelectedTableId(tableId);
+              setActiveScreen('BILLING');
+            }}
+          />
+        );
       case 'BILLING':
         return (
           <BillingScreen 
             categories={categories} 
             menuItems={menuItems} 
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             restaurantInfo={restaurantInfo}
             tables={tables}
+            floors={floors}
             tableCarts={tableCarts}
             addons={addons}
             onCreateOrder={handleCreateOrder}
             onUpdateTableStatus={handleUpdateTableStatus}
             onUpdateTableCarts={handleUpdateTableCarts}
+            variant="desktop"
+            selectedTableId={selectedTableId}
+            onBackToTables={() => {
+              setSelectedTableId(null);
+              setActiveScreen('TABLES');
+            }}
           />
         );
       case 'DASHBOARD':
@@ -663,7 +785,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'ALL_ORDERS':
@@ -674,7 +797,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'COMPLETED_ORDERS':
@@ -685,7 +809,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'CANCELLED_ORDERS':
@@ -696,7 +821,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'REPORTS':
@@ -706,11 +832,12 @@ const App: React.FC = () => {
           <MenuManagement 
             categories={categories} 
             menuItems={menuItems}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             restaurantInfo={restaurantInfo}
             tables={tables}
+            floors={floors}
             addons={addons}
-            setTaxRate={handleSaveTaxRate}
+            setTaxRate={handleSaveTaxRate} setDrinkTaxRate={handleSaveDrinkTaxRate}
             setRestaurantInfo={handleSaveRestaurantInfo}
             onAddMenuItem={handleAddMenuItem}
             onUpdateMenuItem={handleUpdateMenuItem}
@@ -719,7 +846,10 @@ const App: React.FC = () => {
             onUpdateCategory={handleUpdateCategory}
             onDeleteCategory={handleDeleteCategory}
             onAddTable={handleAddTable}
+            onUpdateTable={handleUpdateTable}
             onDeleteTable={handleDeleteTable}
+            onAddFloor={handleAddFloor}
+            onDeleteFloor={handleDeleteFloor}
             onAddAddon={handleAddAddon}
             onUpdateAddon={handleUpdateAddon}
             onDeleteAddon={handleDeleteAddon}
@@ -727,7 +857,7 @@ const App: React.FC = () => {
           />
         );
       default:
-        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} restaurantInfo={restaurantInfo} tables={tables} tableCarts={tableCarts} addons={addons} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
+        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} addons={addons} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
     }
   };
 
@@ -745,6 +875,23 @@ const App: React.FC = () => {
     }
 
     switch (mobileTab) {
+      case 'billing':
+        return (
+          <BillingScreen 
+            categories={categories} 
+            menuItems={menuItems} 
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            restaurantInfo={restaurantInfo}
+            tables={tables}
+            floors={floors}
+            tableCarts={tableCarts}
+            addons={addons}
+            onCreateOrder={handleCreateOrder}
+            onUpdateTableStatus={handleUpdateTableStatus}
+            onUpdateTableCarts={handleUpdateTableCarts}
+            variant="mobile"
+          />
+        );
       case 'analytics':
         return <Dashboard orders={orders} />;
       case 'orders':
@@ -755,7 +902,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'bills':
@@ -766,11 +914,42 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'reports':
         return <Reports orders={orders} />;
+      case 'tablesConfig':
+        return (
+          <MenuManagement
+            categories={categories}
+            menuItems={menuItems}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            restaurantInfo={restaurantInfo}
+            tables={tables}
+            floors={floors}
+            addons={addons}
+            setTaxRate={handleSaveTaxRate} setDrinkTaxRate={handleSaveDrinkTaxRate}
+            setRestaurantInfo={handleSaveRestaurantInfo}
+            onAddMenuItem={handleAddMenuItem}
+            onUpdateMenuItem={handleUpdateMenuItem}
+            onDeleteMenuItem={handleDeleteMenuItem}
+            onAddCategory={handleAddCategory}
+            onUpdateCategory={handleUpdateCategory}
+            onDeleteCategory={handleDeleteCategory}
+            onAddTable={handleAddTable}
+            onUpdateTable={handleUpdateTable}
+            onDeleteTable={handleDeleteTable}
+            onAddFloor={handleAddFloor}
+            onDeleteFloor={handleDeleteFloor}
+            onAddAddon={handleAddAddon}
+            onUpdateAddon={handleUpdateAddon}
+            onDeleteAddon={handleDeleteAddon}
+            onResetMenuDatabase={handleResetMenuDatabase}
+            initialTab="TABLES"
+          />
+        );
       default:
         return <Dashboard orders={orders} />;
     }
@@ -786,11 +965,6 @@ const App: React.FC = () => {
         </div>
       </div>
     );
-  }
-
-  // Show auth screen if not logged in
-  if (!user) {
-    return <AuthScreen />;
   }
 
   // Mobile Layout - triggered by /mobile URL path
@@ -825,7 +999,19 @@ const App: React.FC = () => {
 
         {/* Bottom Navigation */}
         <nav className="bg-white border-t shadow-lg shrink-0 safe-area-bottom">
-          <div className="flex justify-around items-center h-16">
+          <div className="flex justify-start items-center gap-3 h-16 overflow-x-auto px-3">
+            <MobileNavItem
+              icon={<LayoutGrid size={22} />}
+              label="Tables"
+              active={mobileTab === 'billing'}
+              onClick={() => setMobileTab('billing')}
+            />
+            <MobileNavItem
+              icon={<ClipboardList size={22} />}
+              label="Table Config"
+              active={mobileTab === 'tablesConfig'}
+              onClick={() => setMobileTab('tablesConfig')}
+            />
             <MobileNavItem
               icon={<TrendingUp size={22} />}
               label="Analytics"
@@ -913,9 +1099,9 @@ const App: React.FC = () => {
         <nav className="mt-4 flex-1 overflow-y-auto custom-scrollbar">
           <SidebarItem 
             icon={<Receipt size={20} />} 
-            label="Billing" 
-            active={activeScreen === 'BILLING'} 
-            onClick={() => { setActiveScreen('BILLING'); setIsSidebarOpen(false); }} 
+            label="Tables"
+            active={activeScreen === 'TABLES'}
+            onClick={() => { setActiveScreen('TABLES'); setIsSidebarOpen(false); }} 
           />
           <SidebarItem 
             icon={<BarChart3 size={20} />} 
@@ -983,15 +1169,15 @@ const App: React.FC = () => {
                <span className="text-[#F57C00] font-bold text-lg">DRONA</span>
                <div className="h-6 w-px bg-gray-200 mx-2"></div>
                <button
-                 onClick={() => setActiveScreen('BILLING')}
+                 onClick={() => setActiveScreen('TABLES')}
                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-sm transition-all ${
-                   activeScreen === 'BILLING' 
+                   activeScreen === 'TABLES' 
                      ? 'bg-[#F57C00] text-white shadow-lg shadow-orange-200' 
                      : 'bg-gray-100 text-gray-700 hover:bg-orange-50 hover:text-[#F57C00]'
                  }`}
                >
                  <Receipt size={16} />
-                 <span>Billing</span>
+                 <span>Tables</span>
                </button>
                <div className="h-6 w-px bg-gray-200 mx-1"></div>
                <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-full border">
