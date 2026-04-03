@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { 
   Plus, 
@@ -17,6 +17,7 @@ import {
   User,
   Users,
   ArrowLeft,
+  ChevronUp,
   X
 } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -237,6 +238,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [menuType, setMenuType] = useState<'FOOD' | 'DRINK'>('FOOD');
   const [mobileTab, setMobileTab] = useState<'tables' | 'menu' | 'bill'>('tables');
   const [isCategoryCollapsed, setIsCategoryCollapsed] = useState(false);
+  const mobileTablesContainerRef = useRef<HTMLDivElement | null>(null);
+  const mobileCategoriesScrollRef = useRef<HTMLDivElement | null>(null);
+  const mobileItemsScrollRef = useRef<HTMLDivElement | null>(null);
+  const mobileBillScrollRef = useRef<HTMLDivElement | null>(null);
 
   const isDrinkCategory = useMemo(() => {
     const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
@@ -719,6 +724,29 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     return tableCarts[tableId]?.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
   };
 
+  const scrollElementToTop = (element: HTMLElement | null) => {
+    if (!element) return;
+    element.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleMobileScrollToTop = () => {
+    if (mobileTab === 'tables') {
+      const tablesScroller = mobileTablesContainerRef.current?.querySelector('[data-mobile-scroll="tables-grid"]') as HTMLElement | null;
+      scrollElementToTop(tablesScroller ?? mobileTablesContainerRef.current);
+      return;
+    }
+
+    if (mobileTab === 'menu') {
+      scrollElementToTop(mobileCategoriesScrollRef.current);
+      scrollElementToTop(mobileItemsScrollRef.current);
+      return;
+    }
+
+    if (mobileTab === 'bill') {
+      scrollElementToTop(mobileBillScrollRef.current);
+    }
+  };
+
   if (variant === 'mobile') {
     const selectedTable = selectedTableId ? tables.find(t => t.id === selectedTableId) : undefined;
 
@@ -776,8 +804,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         <div className="flex-1 min-h-0 overflow-hidden">
           {mobileTab === 'tables' && (
             <div
-              className="h-full min-h-0 overflow-y-auto"
-              style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+              ref={mobileTablesContainerRef}
+              className="h-full min-h-0 overflow-hidden"
+              style={{ overscrollBehaviorY: 'none', touchAction: 'pan-y' }}
             >
               <TablesGrid
                 tables={tables}
@@ -799,10 +828,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 className={`bg-white border-r transition-all duration-200 ${
                   isCategoryCollapsed ? 'w-12' : 'w-28'
                 }`}
+                style={{ minHeight: 0 }}
               >
                 <div
+                  ref={mobileCategoriesScrollRef}
                   className="h-full overflow-y-auto custom-scrollbar"
-                  style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+                  style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'none', touchAction: 'pan-y' }}
                 >
                   {filteredCategories.map(cat => (
                     <button
@@ -824,8 +855,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               </div>
 
               <div
+                ref={mobileItemsScrollRef}
                 className="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-gray-50 p-3"
-                style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+                style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'none', touchAction: 'pan-y' }}
               >
                 {!selectedTableId ? (
                   <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">
@@ -907,8 +939,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
           {mobileTab === 'bill' && (
             <div
+              ref={mobileBillScrollRef}
               className="h-full min-h-0 overflow-y-auto p-4"
-              style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+              style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'none', touchAction: 'pan-y' }}
             >
               {currentCart.length === 0 ? (
                 <div className="text-center py-16 text-gray-400">
@@ -967,6 +1000,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             </div>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={handleMobileScrollToTop}
+          aria-label="Scroll to top"
+          className="fixed left-3 bottom-20 z-[60] w-11 h-11 rounded-full bg-[#F57C00] text-white shadow-lg shadow-orange-200 flex items-center justify-center"
+        >
+          <ChevronUp size={20} />
+        </button>
 
         <div className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around px-2 z-50">
           <button

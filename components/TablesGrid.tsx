@@ -97,7 +97,7 @@ const TablesGrid: React.FC<TablesGridProps> = ({
   };
 
   return (
-    <div className="p-4 md:p-6 overflow-y-auto h-full">
+    <div data-mobile-scroll="tables-grid" className="p-4 md:p-6 overflow-y-auto h-full">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         {floorSections.map((section, sectionIdx) => (
           <React.Fragment key={section.floorId || `section-${sectionIdx}`}>

@@ -216,18 +216,72 @@ const App: React.FC = () => {
     const prevHtmlOverscroll = document.documentElement.style.overscrollBehaviorY;
     const prevBodyOverflow = document.body.style.overflow;
     const prevHtmlOverflow = document.documentElement.style.overflow;
+    let touchStartY = 0;
+
+    const getScrollableAncestor = (element: Element | null): HTMLElement | null => {
+      let current = element;
+      while (current && current !== document.body) {
+        if (current instanceof HTMLElement) {
+          const style = window.getComputedStyle(current);
+          const canScrollY =
+            (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+            current.scrollHeight > current.clientHeight;
+          if (canScrollY) {
+            return current;
+          }
+        }
+        current = current.parentElement;
+      }
+      return null;
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        touchStartY = event.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+
+      const currentY = event.touches[0].clientY;
+      const pullingDown = currentY > touchStartY;
+      const pushingUp = currentY < touchStartY;
+      const target = event.target as Element | null;
+      const scroller = getScrollableAncestor(target);
+
+      if (!scroller) {
+        // No scroll container under finger, block viewport pull-to-refresh.
+        if (pullingDown) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      const atTop = scroller.scrollTop <= 0;
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+
+      // Stop scroll chaining to viewport edges that triggers browser refresh/bounce.
+      if ((pullingDown && atTop) || (pushingUp && atBottom)) {
+        event.preventDefault();
+      }
+    };
 
     // Prevent browser pull-to-refresh from hijacking in-app vertical scroll.
     document.body.style.overscrollBehaviorY = 'none';
     document.documentElement.style.overscrollBehaviorY = 'none';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
 
     return () => {
       document.body.style.overscrollBehaviorY = prevBodyOverscroll;
       document.documentElement.style.overscrollBehaviorY = prevHtmlOverscroll;
       document.body.style.overflow = prevBodyOverflow;
       document.documentElement.style.overflow = prevHtmlOverflow;
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
     };
   }, [isMobileRoute]);
 
