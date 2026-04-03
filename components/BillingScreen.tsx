@@ -237,6 +237,20 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [menuType, setMenuType] = useState<'FOOD' | 'DRINK'>('FOOD');
   const [mobileTab, setMobileTab] = useState<'tables' | 'menu' | 'bill'>('tables');
   const [isCategoryCollapsed, setIsCategoryCollapsed] = useState(false);
+
+  const isDrinkCategory = useMemo(() => {
+    const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+    const byId = new Map<string, boolean>();
+
+    categories.forEach((category) => {
+      const isDrink =
+        category.type === 'DRINK' ||
+        (!category.type && drinkNamePattern.test(category.name || ''));
+      byId.set(String(category.id), isDrink);
+    });
+
+    return (categoryId: string) => byId.get(String(categoryId)) === true;
+  }, [categories]);
   
   const filteredCategories = useMemo(() => {
     return categories.filter(cat => 
@@ -448,12 +462,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const foodSubtotal = currentCart.reduce((acc, item) => {
-    const isDrink = categories.find(c => c.id === item.categoryId)?.type === 'DRINK';
+    const isDrink = isDrinkCategory(item.categoryId);
     return !isDrink ? acc + (item.price * item.quantity) : acc;
   }, 0);
 
   const drinkSubtotal = currentCart.reduce((acc, item) => {
-    const isDrink = categories.find(c => c.id === item.categoryId)?.type === 'DRINK';
+    const isDrink = isDrinkCategory(item.categoryId);
     return isDrink ? acc + (item.price * item.quantity) : acc;
   }, 0);
 
@@ -590,10 +604,19 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       onUpdateTableCarts(updatedCarts);
       onUpdateTableStatus(selectedTableId, 'AVAILABLE');
       setSelectedTableId(null);
-      if (variant === 'desktop') onBackToTables?.();
+      if (variant === 'desktop') {
+        onBackToTables?.();
+      } else {
+        setMobileTab('tables');
+      }
     } else {
       setDefaultCart([]);
       setDefaultCustomerName('');
+      // Avoid carrying stale table context into the next checkout.
+      setSelectedTableId(null);
+      if (variant === 'mobile') {
+        setMobileTab('menu');
+      }
     }
   };
   // Get table item count for badges
@@ -657,7 +680,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
         <div className="flex-1 overflow-hidden">
           {mobileTab === 'tables' && (
-            <div className="h-full overflow-y-auto">
+            <div
+              className="h-full overflow-y-auto"
+              style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+            >
               <TablesGrid
                 tables={tables}
                 floors={floors}
@@ -679,7 +705,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   isCategoryCollapsed ? 'w-12' : 'w-28'
                 }`}
               >
-                <div className="h-full overflow-y-auto custom-scrollbar">
+                <div
+                  className="h-full overflow-y-auto custom-scrollbar"
+                  style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+                >
                   {filteredCategories.map(cat => (
                     <button
                       key={cat.id}
@@ -699,7 +728,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar bg-gray-50 p-3">
+              <div
+                className="flex-1 overflow-y-auto custom-scrollbar bg-gray-50 p-3"
+                style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+              >
                 {!selectedTableId ? (
                   <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">
                     Select a table to start adding items
@@ -779,7 +811,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           )}
 
           {mobileTab === 'bill' && (
-            <div className="h-full overflow-y-auto p-4">
+            <div
+              className="h-full overflow-y-auto p-4"
+              style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
+            >
               {currentCart.length === 0 ? (
                 <div className="text-center py-16 text-gray-400">
                   <ShoppingBag size={52} className="mx-auto mb-3 opacity-30" />

@@ -209,6 +209,22 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isMobileRoute) return;
+
+    const prevBodyOverscroll = document.body.style.overscrollBehaviorY;
+    const prevHtmlOverscroll = document.documentElement.style.overscrollBehaviorY;
+
+    // Prevent browser pull-to-refresh from hijacking in-app vertical scroll.
+    document.body.style.overscrollBehaviorY = 'none';
+    document.documentElement.style.overscrollBehaviorY = 'none';
+
+    return () => {
+      document.body.style.overscrollBehaviorY = prevBodyOverscroll;
+      document.documentElement.style.overscrollBehaviorY = prevHtmlOverscroll;
+    };
+  }, [isMobileRoute]);
+
   // Firebase Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
