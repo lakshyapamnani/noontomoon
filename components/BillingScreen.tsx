@@ -723,7 +723,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const selectedTable = selectedTableId ? tables.find(t => t.id === selectedTableId) : undefined;
 
     return (
-      <div className="flex flex-col h-full overflow-hidden bg-gray-100 pb-16">
+      <div className="flex flex-col h-full min-h-0 overflow-hidden bg-gray-100 pb-16">
         {/* Item Options Popup (Veg/Non-Veg + Addons) */}
         {optionsItem && (
           <ItemOptionsPopup
@@ -773,10 +773,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {mobileTab === 'tables' && (
             <div
-              className="h-full overflow-y-auto"
+              className="h-full min-h-0 overflow-y-auto"
               style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
             >
               <TablesGrid
@@ -794,7 +794,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           )}
 
           {mobileTab === 'menu' && (
-            <div className="flex h-full">
+            <div className="flex h-full min-h-0">
               <div
                 className={`bg-white border-r transition-all duration-200 ${
                   isCategoryCollapsed ? 'w-12' : 'w-28'
@@ -824,7 +824,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               </div>
 
               <div
-                className="flex-1 overflow-y-auto custom-scrollbar bg-gray-50 p-3"
+                className="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-gray-50 p-3"
                 style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
               >
                 {!selectedTableId ? (
@@ -885,7 +885,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                             <button
                               type="button"
                               onClick={() => handleAddItem(item)}
-                              className="px-4 py-2 rounded-xl border border-green-600 text-green-700 text-xs font-black"
+                              className="px-4 py-2 rounded-xl bg-green-600 text-white text-xs font-black"
                             >
                               ADD
                             </button>
@@ -907,7 +907,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
           {mobileTab === 'bill' && (
             <div
-              className="h-full overflow-y-auto p-4"
+              className="h-full min-h-0 overflow-y-auto p-4"
               style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', touchAction: 'pan-y' }}
             >
               {currentCart.length === 0 ? (

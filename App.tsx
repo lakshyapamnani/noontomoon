@@ -214,14 +214,20 @@ const App: React.FC = () => {
 
     const prevBodyOverscroll = document.body.style.overscrollBehaviorY;
     const prevHtmlOverscroll = document.documentElement.style.overscrollBehaviorY;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
 
     // Prevent browser pull-to-refresh from hijacking in-app vertical scroll.
     document.body.style.overscrollBehaviorY = 'none';
     document.documentElement.style.overscrollBehaviorY = 'none';
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
 
     return () => {
       document.body.style.overscrollBehaviorY = prevBodyOverscroll;
       document.documentElement.style.overscrollBehaviorY = prevHtmlOverscroll;
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
     };
   }, [isMobileRoute]);
 
@@ -1014,7 +1020,7 @@ const App: React.FC = () => {
   // Mobile Layout - triggered by /mobile URL path
   if (isMobileRoute) {
     return (
-      <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
+      <div className="flex flex-col bg-gray-100 overflow-hidden min-h-0" style={{ height: '100dvh' }}>
         {/* Mobile Header */}
         <header className="bg-white h-14 border-b flex items-center justify-between px-4 shrink-0 shadow-sm z-30">
           <div className="flex items-center gap-3">
@@ -1037,7 +1043,7 @@ const App: React.FC = () => {
         </header>
 
         {/* Mobile Content */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden min-h-0">
           {renderMobileScreen()}
         </main>
 
