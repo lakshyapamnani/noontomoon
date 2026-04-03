@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import ReactDOMServer from 'react-dom/server';
+import { jsPDF } from 'jspdf';
 import { 
   Plus, 
   Minus, 
@@ -19,7 +19,7 @@ import {
   ArrowLeft,
   X
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import QRCode from 'qrcode';
 import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Addon, SelectedAddon, Floor } from '../types';
 import TablesGrid from './TablesGrid';
 
@@ -477,88 +477,155 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const tax = gst + vat;
   const total = subtotal + tax;
 
-  const printReceipt = (order: Order) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+  const printReceipt = async (order: Order) => {
+    const addonLineCount = order.items.reduce((count, item) => {
+      return count + (item.selectedAddons && item.selectedAddons.length > 0 ? 1 : 0);
+    }, 0);
+    const lineCount = order.items.length + addonLineCount;
 
-    // Generate UPI QR code SVG
+    const receiptWidthMm = 58;
+    const receiptHeightMm = Math.max(120, Math.min(280, 90 + lineCount * 6));
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [receiptWidthMm, receiptHeightMm],
+      compress: true,
+    });
+
+    const xLeft = 2.5;
+    const xRight = receiptWidthMm - 2.5;
+    const xCenter = receiptWidthMm / 2;
+    let y = 5;
+
+    const writeCenter = (text: string, size = 8, bold = false) => {
+      pdf.setFont('courier', bold ? 'bold' : 'normal');
+      pdf.setFontSize(size);
+      pdf.text(text, xCenter, y, { align: 'center' });
+      y += 4;
+    };
+
+    const writeRow = (left: string, right: string, size = 7, bold = false) => {
+      pdf.setFont('courier', bold ? 'bold' : 'normal');
+      pdf.setFontSize(size);
+      pdf.text(left, xLeft, y);
+      pdf.text(right, xRight, y, { align: 'right' });
+      y += 3.8;
+    };
+
+    const writeLine = () => {
+      pdf.setDrawColor(0);
+      pdf.setLineWidth(0.15);
+      pdf.line(xLeft, y, xRight, y);
+      y += 2.8;
+    };
+
+    writeCenter(restaurantInfo.name, 9, true);
+    writeCenter(restaurantInfo.address, 7);
+    writeCenter(`Tel: ${restaurantInfo.phone}`, 7);
+    writeLine();
+
+    writeRow(`Bill: ${order.billNo}`, '');
+    if (order.customerName) writeRow(`Cust: ${order.customerName}`, '');
+    writeRow(`Date: ${order.date}`, '');
+    writeRow(`Time: ${order.time}`, '');
+    writeRow(`Type: ${order.orderType}`, '');
+    writeLine();
+
+    writeRow('Item', 'Qty   Amt', 7, true);
+    order.items.forEach((it) => {
+      const itemName = it.selectedAddons?.length
+        ? `${it.name} + ${it.selectedAddons.map(a => a.name).join(', ')}`
+        : it.name;
+      const wrapped = pdf.splitTextToSize(itemName, 28) as string[];
+      wrapped.forEach((line, idx) => {
+        if (idx === 0) {
+          writeRow(line, `${it.quantity}   ${(it.price * it.quantity).toFixed(0)}`);
+        } else {
+          writeRow(line, '');
+        }
+      });
+    });
+
+    writeLine();
+    writeRow('Subtotal:', `Rs ${order.subtotal.toFixed(0)}`);
+    writeRow('GST:', `Rs ${gst.toFixed(0)}`);
+    writeRow('VAT:', `Rs ${vat.toFixed(0)}`);
+    writeRow('Tax Total:', `Rs ${order.tax.toFixed(0)}`);
+    writeRow('TOTAL:', `Rs ${order.total.toFixed(0)}`, 8, true);
+    writeLine();
+
+    writeCenter(`Paid via ${order.paymentMode}`, 7, true);
+    writeCenter(`Scan to Pay Rs ${order.total.toFixed(0)}`, 7, true);
+
     const upiUrl = `upi://pay?pa=${BILL_UPI_ID}&pn=${encodeURIComponent(restaurantInfo.name)}&am=${order.total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + order.billNo)}`;
-    const qrSvg = ReactDOMServer.renderToStaticMarkup(
-      React.createElement(QRCodeSVG, { value: upiUrl, size: 120, level: 'H' })
-    );
+    try {
+      const qrDataUrl = await QRCode.toDataURL(upiUrl, { width: 220, margin: 0 });
+      const qrSize = 24;
+      const qrX = (receiptWidthMm - qrSize) / 2;
+      if (y + qrSize + 10 <= receiptHeightMm) {
+        pdf.addImage(qrDataUrl, 'PNG', qrX, y, qrSize, qrSize);
+        y += qrSize + 3;
+      }
+    } catch {
+      // Continue without QR if generation fails.
+    }
 
-    const html = `
-      <html>
-        <head>
-          <style>
-            @page { size: 2in 10in; margin: 0; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 2in; 
-              margin: 0; 
-              padding: 10px; 
-              font-size: 11px; 
-              color: #000; 
-              line-height: 1.2;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .line { border-bottom: 1px dashed #000; margin: 8px 0; }
-            .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-            .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
-            .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; }
-            .qty { width: 25px; text-align: center; }
-            .price { width: 45px; text-align: right; }
-            .footer { margin-top: 15px; font-size: 10px; }
-            .total-section { font-size: 12px; margin-top: 5px; }
-          </style>
-        </head>
-        <body>
-          <div class="center header-name">${restaurantInfo.name}</div>
-          <div class="center">${restaurantInfo.address}</div>
-          <div class="center">Tel: ${restaurantInfo.phone}</div>
-          <div class="line"></div>
-          <div>Bill: ${order.billNo}</div>
-          ${order.customerName ? `<div>Cust: ${order.customerName}</div>` : ''}
-          <div>Date: ${order.date}</div>
-          <div>Time: ${order.time}</div>
-          <div>Type: ${order.orderType}</div>
-          <div class="line"></div>
-          <div class="bold item-row">
-            <span class="item-name">Item</span>
-            <span class="qty">Qty</span>
-            <span class="price">Amt</span>
-          </div>
-          ${order.items.map(it => `
-            <div class="item-row">
-              <span class="item-name">${it.name}${it.selectedAddons?.length ? ' + ' + it.selectedAddons.map(a => a.name).join(', ') : ''}</span>
-              <span class="qty">${it.quantity}</span>
-              <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
-            </div>
-          `).join('')}
-          <div class="line"></div>
-          <div class="item-row"><span>Subtotal:</span><span>₹${order.subtotal.toFixed(0)}</span></div>
-          <div class="item-row"><span>GST:</span><span>₹${gst.toFixed(0)}</span></div>
-          <div class="item-row"><span>VAT:</span><span>₹${vat.toFixed(0)}</span></div>
-          <div class="item-row"><span>Tax Total:</span><span>₹${order.tax.toFixed(0)}</span></div>
-          <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${order.total.toFixed(0)}</span></div>
-          <div class="line"></div>
-          <div class="center">Paid via ${order.paymentMode}</div>
-          <div class="center" style="margin-top:10px;">
-            <p style="font-size:10px;font-weight:bold;margin-bottom:5px;">Scan to Pay ₹${order.total.toFixed(0)}</p>
-            <div style="display:inline-block;">${qrSvg}</div>
-            <p style="font-size:9px;margin-top:4px;">UPI: ${BILL_UPI_ID}</p>
-          </div>
-          <div class="footer center">
-            <p>Thank you!</p>
-            <p>Visit again.</p>
-          </div>
-          <script>window.print(); setTimeout(() => window.close(), 500);</script>
-        </body>
-      </html>
-    `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+    writeCenter(`UPI: ${BILL_UPI_ID}`, 6);
+    writeCenter('Thank you!', 7, true);
+    writeCenter('Visit again.', 7, true);
+
+    const blob = pdf.output('blob');
+    const blobUrl = URL.createObjectURL(blob);
+
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    iframe.src = blobUrl;
+    document.body.appendChild(iframe);
+
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      URL.revokeObjectURL(blobUrl);
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    };
+
+    iframe.onload = () => {
+      const printWindow = iframe.contentWindow;
+      if (!printWindow) {
+        cleanup();
+        alert('Unable to open print preview. Please try again.');
+        return;
+      }
+
+      // Cleanup only after print completes (or fallback after a delay).
+      const handleAfterPrint = () => {
+        printWindow.removeEventListener('afterprint', handleAfterPrint);
+        cleanup();
+      };
+      printWindow.addEventListener('afterprint', handleAfterPrint);
+
+      // Safety fallback in case afterprint doesn't fire on some browsers.
+      window.setTimeout(() => {
+        cleanup();
+      }, 60000);
+
+      // Slight delay gives embedded PDF viewers time to initialize.
+      window.setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+      }, 200);
+    };
   };
 
   const handlePlaceOrder = (print = false) => {
@@ -615,17 +682,19 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       status: 'COMPLETED'
     };
 
+    if (print) {
+      void printReceipt(newOrder);
+      return;
+    }
+
     console.log("Placing order:", newOrder);
     onCreateOrder(newOrder);
     console.log("onCreateOrder called");
-    if (print) {
-      printReceipt(newOrder);
-    }
     
     const selectedTableHasPendingItems =
       !!selectedTableId && toCartItemsArray(tableCarts[selectedTableId]?.items).length > 0;
 
-    // Always clear the selected table when it has pending items.
+    // Checkout finalizes the order, clears cart context, and returns to tables.
     if (selectedTableId && (orderType === 'DINE_IN' || selectedTableHasPendingItems)) {
       updateTableCart(selectedTableId, () => ({ items: [], customerName: '' }));
       onUpdateTableStatus(selectedTableId, 'AVAILABLE');
