@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, Save, X, Utensils, Tag, Store, Percent, LayoutGrid, RefreshCw, Database, Package } from 'lucide-react';
-import { MenuItem, Category, RestaurantInfo, Table, VegType, Addon } from '../types';
+import { MenuItem, Category, RestaurantInfo, Table, VegType, Addon, Floor } from '../types';
 
 interface MenuManagementProps {
   categories: Category[];
@@ -9,6 +9,7 @@ interface MenuManagementProps {
   drinkTaxRate: number;
   restaurantInfo: RestaurantInfo;
   tables: Table[];
+  floors: Floor[];
   addons: Addon[];
   setTaxRate: (rate: number) => void;
   setDrinkTaxRate: (rate: number) => void;
@@ -19,8 +20,11 @@ interface MenuManagementProps {
   onAddCategory: (name: string, type?: 'FOOD' | 'DRINK') => void;
   onUpdateCategory: (cat: Category) => void;
   onDeleteCategory: (id: string) => void;
-  onAddTable: (name: string) => void;
+  onAddTable: (name: string, floorId?: string) => void;
+  onUpdateTable: (table: Table) => void;
   onDeleteTable: (id: string) => void;
+  onAddFloor: (name: string) => void;
+  onDeleteFloor: (id: string) => void;
   onAddAddon: (addon: Addon) => void;
   onUpdateAddon: (addon: Addon) => void;
   onDeleteAddon: (id: string) => void;
@@ -34,6 +38,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   drinkTaxRate,
   restaurantInfo,
   tables,
+  floors,
   addons,
   setTaxRate,
   setDrinkTaxRate,
@@ -45,7 +50,10 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   onUpdateCategory,
   onDeleteCategory,
   onAddTable,
+  onUpdateTable,
   onDeleteTable,
+  onAddFloor,
+  onDeleteFloor,
   onAddAddon,
   onUpdateAddon,
   onDeleteAddon,
@@ -54,6 +62,8 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'ADDONS' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
   const [searchTerm, setSearchTerm] = useState('');
   const [newTableName, setNewTableName] = useState('');
+  const [newTableFloorId, setNewTableFloorId] = useState('');
+  const [newFloorName, setNewFloorName] = useState('');
   
   const [isDrinkItemModalOpen, setIsDrinkItemModalOpen] = useState(false);
   const [isDrinkCatModalOpen, setIsDrinkCatModalOpen] = useState(false);
@@ -251,24 +261,26 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           )}
 
           {activeTab === 'CATEGORIES' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {categories.map(cat => (
-                <div key={cat.id} className="p-6 border-2 border-gray-200 bg-white rounded-2xl flex items-center justify-between hover:bg-orange-50/30 hover:border-[#F57C00] transition-colors group shadow-sm">
-                  <div className="flex flex-col">
-                    <span className="font-black text-gray-900">{cat.name}</span>
-                    <span className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">{cat.type === 'DRINK' ? 'Drink' : 'Food'}</span>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {categories.map(cat => (
+                  <div key={cat.id} className="p-6 border-2 border-gray-200 bg-white rounded-2xl flex items-center justify-between hover:bg-orange-50/30 hover:border-[#F57C00] transition-colors group shadow-sm">
+                    <div className="flex flex-col">
+                      <span className="font-black text-gray-900">{cat.name}</span>
+                      <span className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">{cat.type === 'DRINK' ? 'Drink' : 'Food'}</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleOpenCatModal(cat)} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={16} /></button>
+                      <button onClick={() => onDeleteCategory(cat.id)} className="p-2 text-gray-900 hover:text-black"><Trash2 size={16} /></button>
+                    </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => handleOpenCatModal(cat)} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={16} /></button>
-                    <button onClick={() => onDeleteCategory(cat.id)} className="p-2 text-gray-900 hover:text-black"><Trash2 size={16} /></button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
           {activeTab === 'DRINKS' && (
-            <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar flex-1 pb-20">
+            <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1">
               <div className="flex gap-4 mb-4">
                 <button onClick={() => { setEditingDrinkItem(null); setItemCategoryId(drinkCategories.length > 0 ? drinkCategories[0].id : ''); setIsDrinkItemModalOpen(true); }} className="bg-[#F57C00] text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"><Plus size={20} /> Add Drink Item</button>
                 <button onClick={() => { setEditingDrinkCat(null); setIsDrinkCatModalOpen(true); }} className="bg-white text-[#F57C00] border-2 border-[#F57C00] px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-orange-50 transition-all shadow-sm active:scale-95"><Plus size={20} /> Add Drink Category</button>
@@ -314,7 +326,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           )}
 
           {activeTab === 'ADDONS' && (
-            <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+            <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
               {/* Group addons by category */}
               {categories.map(cat => {
                 const categoryAddons = addons.filter(a => a.categoryId === cat.id);
@@ -366,30 +378,97 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           )}
 
           {activeTab === 'TABLES' && (
-            <div className="space-y-6">
+            <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-w-xl p-6 border-2 border-gray-200 rounded-2xl bg-white shadow-sm">
+                <h3 className="text-lg font-black text-gray-900 mb-4">Manage Floors</h3>
+                <div className="flex gap-3 mb-4">
+                  <input
+                    type="text"
+                    value={newFloorName}
+                    onChange={(e) => setNewFloorName(e.target.value)}
+                    placeholder="Enter floor name (e.g., Ground Floor)"
+                    className="flex-1 p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none placeholder:text-gray-400"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newFloorName.trim()) return;
+                      onAddFloor(newFloorName.trim());
+                      setNewFloorName('');
+                    }}
+                    disabled={!newFloorName.trim()}
+                    className="px-5 py-3 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Plus size={20} /> Add Floor
+                  </button>
+                </div>
+
+                {floors.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {floors
+                      .slice()
+                      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+                      .map((floor) => (
+                        <div key={floor.id} className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-gray-50 px-3 py-1.5">
+                          <span className="text-xs font-black text-gray-700 uppercase tracking-wide">{floor.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Delete floor \"${floor.name}\"? Tables on this floor will move to no floor.`)) {
+                                onDeleteFloor(floor.id);
+                              }
+                            }}
+                            className="text-gray-500 hover:text-red-600"
+                            title="Delete floor"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 font-bold">No floors yet. Add one to organize tables by floor.</p>
+                )}
+              </div>
+
               {/* Add New Table */}
               <div className="max-w-xl p-6 border-2 border-gray-200 rounded-2xl bg-white shadow-sm">
                 <h3 className="text-lg font-black text-gray-900 mb-4">Add New Table</h3>
-                <div className="flex gap-3">
-                  <input 
-                    type="text"
-                    value={newTableName}
-                    onChange={(e) => setNewTableName(e.target.value)}
-                    placeholder="Enter table name (e.g., T-7)"
-                    className="flex-1 p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none placeholder:text-gray-400"
-                  />
-                  <button 
-                    onClick={() => {
-                      if (newTableName.trim()) {
-                        onAddTable(newTableName.trim());
-                        setNewTableName('');
-                      }
-                    }}
-                    disabled={!newTableName.trim()}
-                    className="px-6 py-3 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <input 
+                      type="text"
+                      value={newTableName}
+                      onChange={(e) => setNewTableName(e.target.value)}
+                      placeholder="Enter table name (e.g., T-7)"
+                      className="flex-1 p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none placeholder:text-gray-400"
+                    />
+                    <button 
+                      onClick={() => {
+                        if (newTableName.trim()) {
+                          onAddTable(newTableName.trim(), newTableFloorId || undefined);
+                          setNewTableName('');
+                        }
+                      }}
+                      disabled={!newTableName.trim()}
+                      className="px-6 py-3 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Plus size={20} /> Add Table
+                    </button>
+                  </div>
+
+                  <select
+                    value={newTableFloorId}
+                    onChange={(e) => setNewTableFloorId(e.target.value)}
+                    className="w-full p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none bg-white"
                   >
-                    <Plus size={20} /> Add Table
-                  </button>
+                    <option value="">No Floor</option>
+                    {floors
+                      .slice()
+                      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+                      .map((floor) => (
+                        <option key={floor.id} value={floor.id}>{floor.name}</option>
+                      ))}
+                  </select>
                 </div>
               </div>
 
@@ -409,6 +488,9 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       }`}
                     >
                       <div className="text-2xl font-black text-gray-900 mb-1">{table.name}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                        {floors.find(f => f.id === table.floorId)?.name || 'No floor'}
+                      </div>
                       <div className={`text-xs font-black uppercase ${
                         table.status === 'AVAILABLE' 
                           ? 'text-green-600' 
@@ -418,6 +500,19 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       }`}>
                         {table.status}
                       </div>
+                      <select
+                        value={table.floorId || ''}
+                        onChange={(e) => onUpdateTable({ ...table, floorId: e.target.value || undefined })}
+                        className="mt-3 w-full p-2 rounded-lg border border-gray-300 text-[11px] font-black text-gray-700 bg-white"
+                      >
+                        <option value="">No Floor</option>
+                        {floors
+                          .slice()
+                          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+                          .map((floor) => (
+                            <option key={floor.id} value={floor.id}>{floor.name}</option>
+                          ))}
+                      </select>
                       {table.status === 'AVAILABLE' && (
                         <button 
                           onClick={() => {
@@ -493,44 +588,46 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           )}
 
           {activeTab === 'RESTAURANT' && (
-            <div className="max-w-xl mx-auto w-full p-8 border-2 border-gray-200 rounded-3xl bg-white shadow-lg">
-               <h3 className="text-xl font-black text-gray-900 mb-6">Restaurant Profile</h3>
-               <form onSubmit={handleSaveRestaurantProfile} className="space-y-6">
-                 <div>
-                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Restaurant Name</label>
-                   <input 
-                    type="text" 
-                    value={localRestaurantInfo.name} 
-                    onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, name: e.target.value})}
-                    placeholder="Enter restaurant name"
-                    className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Phone Number</label>
-                   <input 
-                    type="text" 
-                    value={localRestaurantInfo.phone} 
-                    onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, phone: e.target.value})}
-                    placeholder="e.g., +91 9876543210"
-                    className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Address</label>
-                   <textarea 
-                    rows={3}
-                    value={localRestaurantInfo.address} 
-                    onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, address: e.target.value})}
-                    placeholder="Enter complete address for the bill"
-                    className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none resize-none shadow-inner placeholder:text-gray-400" 
-                   />
-                 </div>
-                 <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95">
-                   <Save size={20} /> Save Business Profile
-                 </button>
-                 <p className="text-xs text-gray-800 text-center font-black uppercase">These details appear on your printed receipts.</p>
-               </form>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-w-xl mx-auto w-full p-8 border-2 border-gray-200 rounded-3xl bg-white shadow-lg">
+                 <h3 className="text-xl font-black text-gray-900 mb-6">Restaurant Profile</h3>
+                 <form onSubmit={handleSaveRestaurantProfile} className="space-y-6">
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Restaurant Name</label>
+                     <input 
+                      type="text" 
+                      value={localRestaurantInfo.name} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, name: e.target.value})}
+                      placeholder="Enter restaurant name"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Phone Number</label>
+                     <input 
+                      type="text" 
+                      value={localRestaurantInfo.phone} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, phone: e.target.value})}
+                      placeholder="e.g., +91 9876543210"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Address</label>
+                     <textarea 
+                      rows={3}
+                      value={localRestaurantInfo.address} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, address: e.target.value})}
+                      placeholder="Enter complete address for the bill"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none resize-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
+                   <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95">
+                     <Save size={20} /> Save Business Profile
+                   </button>
+                   <p className="text-xs text-gray-800 text-center font-black uppercase">These details appear on your printed receipts.</p>
+                 </form>
+              </div>
             </div>
           )}
 
