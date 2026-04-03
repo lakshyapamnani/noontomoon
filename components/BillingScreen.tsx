@@ -472,7 +472,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   }, 0);
 
   const subtotal = foodSubtotal + drinkSubtotal;
-  const tax = (foodSubtotal * taxRate) + (drinkSubtotal * drinkTaxRate);
+  const gst = foodSubtotal * taxRate;
+  const vat = drinkSubtotal * drinkTaxRate;
+  const tax = gst + vat;
   const total = subtotal + tax;
 
   const printReceipt = (order: Order) => {
@@ -536,7 +538,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           `).join('')}
           <div class="line"></div>
           <div class="item-row"><span>Subtotal:</span><span>₹${order.subtotal.toFixed(0)}</span></div>
-          <div class="item-row"><span>Tax:</span><span>₹${order.tax.toFixed(0)}</span></div>
+          <div class="item-row"><span>GST:</span><span>₹${gst.toFixed(0)}</span></div>
+          <div class="item-row"><span>VAT:</span><span>₹${vat.toFixed(0)}</span></div>
+          <div class="item-row"><span>Tax Total:</span><span>₹${order.tax.toFixed(0)}</span></div>
           <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center">Paid via ${order.paymentMode}</div>
@@ -558,15 +562,36 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const handlePlaceOrder = (print = false) => {
-    if (currentCart.length === 0) {
+    const selectedTableItems = selectedTableId
+      ? toCartItemsArray(tableCarts[selectedTableId]?.items)
+      : [];
+    const checkoutItems = currentCart.length > 0 ? currentCart : selectedTableItems;
+    const effectiveOrderType: OrderType =
+      selectedTableId && selectedTableItems.length > 0 ? 'DINE_IN' : orderType;
+
+    if (checkoutItems.length === 0) {
       alert("Please add items to the cart first.");
       return;
     }
 
-    if (orderType === 'DINE_IN' && !selectedTableId) {
+    if (effectiveOrderType === 'DINE_IN' && !selectedTableId) {
       alert("Please select a table for dine-in orders.");
       return;
     }
+
+    const checkoutFoodSubtotal = checkoutItems.reduce((acc, item) => {
+      const isDrink = isDrinkCategory(item.categoryId);
+      return !isDrink ? acc + (item.price * item.quantity) : acc;
+    }, 0);
+
+    const checkoutDrinkSubtotal = checkoutItems.reduce((acc, item) => {
+      const isDrink = isDrinkCategory(item.categoryId);
+      return isDrink ? acc + (item.price * item.quantity) : acc;
+    }, 0);
+
+    const checkoutSubtotal = checkoutFoodSubtotal + checkoutDrinkSubtotal;
+    const checkoutTax = (checkoutFoodSubtotal * taxRate) + (checkoutDrinkSubtotal * drinkTaxRate);
+    const checkoutTotal = checkoutSubtotal + checkoutTax;
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const d = new Date();
@@ -576,16 +601,16 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       id: Math.random().toString(36).substr(2, 9),
       billNo: `INV-${Date.now().toString().substr(-6)}`,
       customerName: (customerName || "").trim() || "Guest",
-      tableId: orderType === 'DINE_IN' && selectedTableId ? selectedTableId : "",
-      tableName: orderType === 'DINE_IN' && selectedTable ? selectedTable.name : "",
+      tableId: effectiveOrderType === 'DINE_IN' && selectedTableId ? selectedTableId : "",
+      tableName: effectiveOrderType === 'DINE_IN' && selectedTable ? selectedTable.name : "",
       date: dateStr, // YYYY-MM-DD for consistent "Today" filtering across app restarts
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      items: [...currentCart],
-      subtotal,
-      tax,
-      total,
+      items: [...checkoutItems],
+      subtotal: checkoutSubtotal,
+      tax: checkoutTax,
+      total: checkoutTotal,
       paymentMode,
-      orderType,
+      orderType: effectiveOrderType,
       staffName: 'Admin',
       status: 'COMPLETED'
     };
@@ -597,11 +622,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       printReceipt(newOrder);
     }
     
-    // Clear the cart for the table and make table available
-    if (orderType === 'DINE_IN' && selectedTableId) {
-      const updatedCarts = { ...tableCarts };
-      delete updatedCarts[selectedTableId];
-      onUpdateTableCarts(updatedCarts);
+    const selectedTableHasPendingItems =
+      !!selectedTableId && toCartItemsArray(tableCarts[selectedTableId]?.items).length > 0;
+
+    // Always clear the selected table when it has pending items.
+    if (selectedTableId && (orderType === 'DINE_IN' || selectedTableHasPendingItems)) {
+      updateTableCart(selectedTableId, () => ({ items: [], customerName: '' }));
       onUpdateTableStatus(selectedTableId, 'AVAILABLE');
       setSelectedTableId(null);
       if (variant === 'desktop') {
@@ -851,7 +877,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                       <span>₹{subtotal.toFixed(0)}</span>
                     </div>
                     <div className="flex justify-between text-sm text-gray-600">
-                      <span>Tax + VAT</span>
+                      <span>GST</span>
+                      <span>₹{gst.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>VAT</span>
+                      <span>₹{vat.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Tax Total</span>
                       <span>₹{tax.toFixed(0)}</span>
                     </div>
                     <div className="flex justify-between text-lg font-black mt-2">
@@ -1152,7 +1186,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               <span>₹{subtotal.toFixed(0)}</span>
             </div>
             <div className="flex justify-between text-gray-400">
-              <span>Tax (GST)</span>
+              <span>GST</span>
+              <span>₹{gst.toFixed(0)}</span>
+            </div>
+            <div className="flex justify-between text-gray-400">
+              <span>VAT</span>
+              <span>₹{vat.toFixed(0)}</span>
+            </div>
+            <div className="flex justify-between text-gray-400">
+              <span>Tax Total</span>
               <span>₹{tax.toFixed(0)}</span>
             </div>
             <div className="flex justify-between text-2xl font-black text-gray-900 border-t-2 border-dashed border-gray-200 pt-3 mt-3">
