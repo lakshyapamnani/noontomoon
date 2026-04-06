@@ -28,11 +28,7 @@ import {
 import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
 
 const formatItemDisplay = (it: CartItem) => {
-  const base = `${it.name} x ${it.quantity}`;
-  const addons = it.selectedAddons?.length
-    ? ` (+ ${it.selectedAddons.map(a => a.name).join(', ')})`
-    : '';
-  return base + addons;
+  return `${it.name} x ${it.quantity}`;
 };
 
 interface OrdersListProps {
@@ -171,7 +167,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           </div>
           ${order.items.map(it => `
             <div class="item-row">
-              <span class="item-name">${it.name}${it.selectedAddons?.length ? ' + ' + it.selectedAddons.map(a => a.name).join(', ') : ''}</span>
+              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
               <span class="qty">${it.quantity}</span>
               <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
@@ -909,12 +905,9 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                   {selectedOrder.items.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-white p-3 border border-gray-100 rounded-xl">
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${item.isVeg || item.selectedVegChoice === 'VEG' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${item.selectedVegChoice === 'SEAFOOD' ? 'bg-blue-500' : (item.isVeg || item.selectedVegChoice === 'VEG') ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <div>
-                          <p className="font-bold text-gray-800 text-sm">{item.name}</p>
-                          {item.selectedAddons?.length ? (
-                            <p className="text-[10px] text-orange-600 font-bold">+ {item.selectedAddons.map(a => a.name).join(', ')}</p>
-                          ) : null}
+                          <p className="font-bold text-gray-800 text-sm">{item.name}{item.selectedPortion ? ` (${item.selectedPortion === 'HALF' ? 'Half' : 'Full'})` : ''}</p>
                           <p className="text-[10px] text-gray-400 font-bold">₹{item.price} x {item.quantity}</p>
                         </div>
                       </div>

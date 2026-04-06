@@ -32,13 +32,14 @@ import {
   OrderStatus, 
   RestaurantInfo,
   Table,
-  Addon,
   Floor
 } from './types';
 import { 
   INITIAL_CATEGORIES, 
   INITIAL_MENU_ITEMS, 
-  TAX_RATE as INITIAL_TAX_RATE 
+  TAX_RATE as INITIAL_TAX_RATE,
+  DRINK_TAX_RATE as INITIAL_DRINK_TAX_RATE,
+  INITIAL_RESTAURANT_INFO
 } from './constants';
 import BillingScreen from './components/BillingScreen';
 import Dashboard from './components/Dashboard';
@@ -49,7 +50,7 @@ import TablesGrid from './components/TablesGrid';
 
 // Firebase imports
 import { db, auth } from './firebase';
-import { ref, onValue, set, push, update } from 'firebase/database';
+import { ref, onValue, set, push, update, get } from 'firebase/database';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 
 type ActiveScreen = 
@@ -118,6 +119,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
   const [orders, setOrders] = useState<Order[]>([]);  // Orders are stored in Firebase only
+  const [billCounter, setBillCounter] = useState<number>(0);  // Sequential bill counter synced from Firebase
   const [tables, setTables] = useState<Table[]>(() => {
     const saved = localStorage.getItem('drona_tables');
     return saved ? JSON.parse(saved) : [];
@@ -126,10 +128,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('drona_floors');
     return saved ? JSON.parse(saved) : [];
   });
-  const [addons, setAddons] = useState<Addon[]>(() => {
-    const saved = localStorage.getItem('drona_addons');
-    return saved ? JSON.parse(saved) : [];
-  });
+
   const [tableCarts, setTableCarts] = useState<Record<string, { items: any[]; customerName: string }>>(() => {
     const saved = localStorage.getItem('drona_table_carts');
     return saved ? JSON.parse(saved) : {};
@@ -141,15 +140,11 @@ const App: React.FC = () => {
   });
   const [drinkTaxRate, setDrinkTaxRate] = useState(() => {
     const saved = localStorage.getItem('drona_drink_tax_rate');
-    return saved ? parseFloat(saved) : 0;
+    return saved ? parseFloat(saved) : INITIAL_DRINK_TAX_RATE;
   });
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>(() => {
     const saved = localStorage.getItem('drona_restaurant_info');
-    return saved ? JSON.parse(saved) : {
-      name: 'NOON TO MOON CAFE',
-      phone: '+91 9876543210',
-      address: '123 Main Street, Food Park, City'
-    };
+    return saved ? JSON.parse(saved) : INITIAL_RESTAURANT_INFO;
   });
 
   const buildRecordById = (items: Array<{ id: string }>) => {
@@ -302,7 +297,7 @@ const App: React.FC = () => {
       localStorage.removeItem('drona_menu_items');
       localStorage.removeItem('drona_tables');
       localStorage.removeItem('drona_floors');
-      localStorage.removeItem('drona_addons');
+
       localStorage.removeItem('drona_table_carts');
       localStorage.removeItem('drona_tax_rate');
       localStorage.removeItem('drona_restaurant_info');
@@ -446,6 +441,17 @@ const App: React.FC = () => {
       setIsDataLoaded(true);
     });
 
+    // Bill Counter Sync
+    const billCounterRef = ref(db, userPath('bill_counter'));
+    const unsubscribeBillCounter = onValue(billCounterRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null && data !== undefined) {
+        setBillCounter(Number(data));
+      } else {
+        setBillCounter(0);
+      }
+    });
+
     // Settings Sync
     const settingsRef = ref(db, userPath('settings'));
     const unsubscribeSettings = onValue(settingsRef, (snapshot) => {
@@ -489,28 +495,7 @@ const App: React.FC = () => {
       }
     });
 
-    // Addons Sync
-    const addonsRef = ref(db, userPath('addons'));
-    const unsubscribeAddons = onValue(addonsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const addonArray = Object.values(data) as Addon[];
-        setAddons(addonArray);
-        localStorage.setItem('drona_addons', JSON.stringify(addonArray));
-      } else {
-        const saved = localStorage.getItem('drona_addons');
-        if (saved) {
-          const addonArray = JSON.parse(saved) as Addon[];
-          if (addonArray.length > 0) {
-            set(ref(db, userPath('addons')), buildRecordById(addonArray));
-            setAddons(addonArray);
-            return;
-          }
-        }
-        setAddons([]);
-        localStorage.setItem('drona_addons', JSON.stringify([]));
-      }
-    });
+
 
     const floorsRef = ref(db, userPath('floors'));
     const unsubscribeFloors = onValue(floorsRef, (snapshot) => {
@@ -570,9 +555,10 @@ const App: React.FC = () => {
       unsubscribeOrders();
       unsubscribeSettings();
       unsubscribeTables();
-      unsubscribeAddons();
+
       unsubscribeFloors();
       unsubscribeTableCarts();
+      unsubscribeBillCounter();
     };
   }, []);
 
@@ -580,13 +566,29 @@ const App: React.FC = () => {
   const handleCreateOrder = async (order: Order) => {
     console.log("Creating order:", order);
     
+    // Get current counter from Firebase to ensure consistency
+    let currentCounter = billCounter;
+    try {
+      const counterSnap = await get(ref(db, userPath('bill_counter')));
+      if (counterSnap.exists()) {
+        currentCounter = Number(counterSnap.val());
+      }
+    } catch {
+      // Fallback to local state
+    }
+    
+    const newCounter = currentCounter + 1;
+    order.billNo = `INV-${newCounter}`;
+    
     // Clean the order object - remove undefined values (Firebase doesn't accept undefined)
     const cleanOrder = JSON.parse(JSON.stringify(order));
     
     try {
-      // Save directly to Firebase - the onValue listener will update local state
+      // Save order and update counter atomically
       await set(ref(db, userPath(`orders/${order.id}`)), cleanOrder);
-      console.log("Order saved to Firebase successfully:", order.id);
+      await set(ref(db, userPath('bill_counter')), newCounter);
+      setBillCounter(newCounter);
+      console.log("Order saved to Firebase successfully:", order.id, "Bill:", order.billNo);
     } catch (error) {
       console.error("Firebase Error (Create Order):", error);
       alert("Failed to save order. Please check your internet connection.");
@@ -798,40 +800,13 @@ const App: React.FC = () => {
       for (const item of itemsToDelete) {
         await set(ref(db, userPath(`menu_items/${item.id}`)), null);
       }
-      // Also delete addons linked to this category
-      const addonsToDelete = addons.filter(a => a.categoryId === id);
-      for (const addon of addonsToDelete) {
-        await set(ref(db, userPath(`addons/${addon.id}`)), null);
-      }
+
     } catch (error) {
       console.error("Firebase Sync Error (Delete Category):", error);
     }
   };
 
-  // Addon Handlers
-  const handleAddAddon = async (addon: Addon) => {
-    try {
-      await set(ref(db, userPath(`addons/${addon.id}`)), addon);
-    } catch (error) {
-      console.error("Firebase Sync Error (Add Addon):", error);
-    }
-  };
 
-  const handleUpdateAddon = async (addon: Addon) => {
-    try {
-      await set(ref(db, userPath(`addons/${addon.id}`)), addon);
-    } catch (error) {
-      console.error("Firebase Sync Error (Update Addon):", error);
-    }
-  };
-
-  const handleDeleteAddon = async (id: string) => {
-    try {
-      await set(ref(db, userPath(`addons/${id}`)), null);
-    } catch (error) {
-      console.error("Firebase Sync Error (Delete Addon):", error);
-    }
-  };
 
   const handleSaveTaxRate = async (newRate: number) => {
     setTaxRate(newRate);
@@ -905,6 +880,49 @@ const App: React.FC = () => {
     }
   };
 
+  // Factory Reset: Wipes menu items, orders, table carts, and resets bill counter
+  const handleFactoryReset = async () => {
+    try {
+      // Clear menu items and categories
+      await set(ref(db, userPath('menu_items')), null);
+      await set(ref(db, userPath('categories')), null);
+      
+      // Clear orders
+      await set(ref(db, userPath('orders')), null);
+      
+      // Clear table carts (pending orders on tables)
+      await set(ref(db, userPath('table_carts')), null);
+      
+      // Clear bill counter so next bill is INV-1
+      await set(ref(db, userPath('bill_counter')), 0);
+      setBillCounter(0);
+
+      // Update local state
+      setMenuItems([]);
+      setCategories([]);
+
+      setOrders([]);
+      setTableCarts({});
+      localStorage.setItem('drona_menu_items', JSON.stringify([]));
+      localStorage.setItem('drona_categories', JSON.stringify([]));
+
+      localStorage.setItem('drona_table_carts', JSON.stringify({}));
+      
+      // Reset tables currentOrderId and status if they are occupied
+      const resetTables = tables.map(t => ({ ...t, status: 'AVAILABLE' as const, currentOrderId: undefined }));
+      setTables(resetTables);
+      localStorage.setItem('drona_tables', JSON.stringify(resetTables));
+      for (const t of resetTables) {
+        await update(ref(db, userPath(`tables/${t.id}`)), { status: 'AVAILABLE', currentOrderId: null });
+      }
+
+      alert('Database wiped successfully! Menu items, orders, and table carts have been cleared. Order IDs will now start from INV-1.');
+    } catch (error) {
+      console.error('Error wiping database:', error);
+      alert('Failed to wipe database. Check console for details.');
+    }
+  };
+
   // Print bill for a table from the tables screen
   const handlePrintTableBill = (tableId: string) => {
     const cart = tableCarts[tableId];
@@ -965,7 +983,7 @@ const App: React.FC = () => {
           </div>
           ${items.map(it => `
             <div class="item-row">
-              <span class="item-name">${it.name}${it.selectedAddons?.length ? ' + ' + it.selectedAddons.map(a => a.name).join(', ') : ''}</span>
+              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
               <span class="qty">${it.quantity}</span>
               <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
@@ -1060,7 +1078,7 @@ const App: React.FC = () => {
             tables={tables}
             floors={floors}
             tableCarts={tableCarts}
-            addons={addons}
+
             onCreateOrder={handleCreateOrder}
             onUpdateTableStatus={handleUpdateTableStatus}
             onUpdateTableCarts={handleUpdateTableCarts}
@@ -1133,7 +1151,7 @@ const App: React.FC = () => {
             restaurantInfo={restaurantInfo}
             tables={tables}
             floors={floors}
-            addons={addons}
+
             setTaxRate={handleSaveTaxRate} setDrinkTaxRate={handleSaveDrinkTaxRate}
             setRestaurantInfo={handleSaveRestaurantInfo}
             onAddMenuItem={handleAddMenuItem}
@@ -1147,14 +1165,13 @@ const App: React.FC = () => {
             onDeleteTable={handleDeleteTable}
             onAddFloor={handleAddFloor}
             onDeleteFloor={handleDeleteFloor}
-            onAddAddon={handleAddAddon}
-            onUpdateAddon={handleUpdateAddon}
-            onDeleteAddon={handleDeleteAddon}
+
             onResetMenuDatabase={handleResetMenuDatabase}
+            onFactoryReset={handleFactoryReset}
           />
         );
       default:
-        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} addons={addons} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
+        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
     }
   };
 
@@ -1180,7 +1197,7 @@ const App: React.FC = () => {
         tables={tables}
         floors={floors}
         tableCarts={tableCarts}
-        addons={addons}
+
         onCreateOrder={handleCreateOrder}
         onUpdateTableStatus={handleUpdateTableStatus}
         onUpdateTableCarts={handleUpdateTableCarts}

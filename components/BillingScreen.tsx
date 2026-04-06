@@ -22,55 +22,47 @@ import {
   Search
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Addon, SelectedAddon, Floor } from '../types';
+import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor } from '../types';
 import TablesGrid from './TablesGrid';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
 
 interface ItemOptionsPopupProps {
   item: MenuItem;
-  categoryAddons: Addon[];
-  onConfirm: (choice: 'VEG' | 'NON_VEG' | null, selectedAddons: SelectedAddon[]) => void;
+  onConfirm: (choice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null) => void;
   onClose: () => void;
 }
 
-const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, categoryAddons, onConfirm, onClose }) => {
-  const [vegChoice, setVegChoice] = useState<'VEG' | 'NON_VEG' | null>(item.vegType === 'BOTH' ? null : null);
-  const [selectedAddons, setSelectedAddons] = useState<SelectedAddon[]>([]);
-
-  const toggleAddon = (addon: Addon) => {
-    const exists = selectedAddons.find(a => a.id === addon.id);
-    if (exists) {
-      setSelectedAddons(selectedAddons.filter(a => a.id !== addon.id));
-    } else {
-      setSelectedAddons([...selectedAddons, { id: addon.id, name: addon.name, price: addon.price }]);
-    }
-  };
+const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, onConfirm, onClose }) => {
+  const [vegChoice, setVegChoice] = useState<'VEG' | 'NON_VEG' | 'SEAFOOD' | null>(item.vegType === 'BOTH' ? null : null);
+  const [portionChoice, setPortionChoice] = useState<'HALF' | 'FULL' | null>(item.hasPortions ? null : null);
 
   const handleConfirm = () => {
     // For BOTH type items, veg choice is required
-    if (item.vegType === 'BOTH' && !vegChoice) {
-      return;
-    }
-    onConfirm(vegChoice, selectedAddons);
+    if (item.vegType === 'BOTH' && !vegChoice) return;
+    // For portions, portion choice is required
+    if (item.hasPortions && !portionChoice) return;
+    
+    onConfirm(vegChoice, portionChoice);
   };
 
   // Calculate total price
-  const basePrice = item.vegType === 'BOTH' 
-    ? (vegChoice === 'VEG' ? item.vegPrice : vegChoice === 'NON_VEG' ? item.nonVegPrice : 0) 
+  const vegBasePrice = item.vegType === 'BOTH' 
+    ? (vegChoice === 'VEG' ? item.vegPrice : vegChoice === 'NON_VEG' ? item.nonVegPrice : vegChoice === 'SEAFOOD' ? item.seafoodPrice : 0) 
     : item.price;
-  const addonsTotal = selectedAddons.reduce((sum, a) => sum + a.price, 0);
-  const totalPrice = (basePrice || 0) + addonsTotal;
+    
+  const basePrice = (item.hasPortions && portionChoice === 'HALF') ? (item.halfPrice || 0) : vegBasePrice;
+  const totalPrice = (basePrice || 0);
 
-  // If no options needed (not BOTH and no addons), auto-confirm
+  // If no options needed (not BOTH, no portions), auto-confirm
   useEffect(() => {
-    if (item.vegType !== 'BOTH' && categoryAddons.length === 0) {
-      onConfirm(null, []);
+    if (item.vegType !== 'BOTH' && !item.hasPortions) {
+      onConfirm(null, null);
     }
   }, []);
 
   // Only show popup if there are options to select
-  if (item.vegType !== 'BOTH' && categoryAddons.length === 0) {
+  if (item.vegType !== 'BOTH' && !item.hasPortions) {
     return null;
   }
 
@@ -114,42 +106,58 @@ const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, categoryAddon
                 <span className="text-sm">Non-Veg</span>
                 <span className="text-xs opacity-80">₹{item.nonVegPrice}</span>
               </button>
+              {item.seafoodPrice != null && (
+                <button
+                  onClick={() => setVegChoice('SEAFOOD')}
+                  className={`flex-1 py-3 rounded-xl font-black transition-all flex flex-col items-center gap-1 border-2 ${
+                    vegChoice === 'SEAFOOD' 
+                      ? 'bg-blue-500 text-white border-blue-500 shadow-lg shadow-blue-200' 
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+                  }`}
+                >
+                  <span className={`w-3 h-3 rounded-full ${vegChoice === 'SEAFOOD' ? 'bg-white' : 'bg-blue-500'}`}></span>
+                  <span className="text-sm">Seafood</span>
+                  <span className="text-xs opacity-80">₹{item.seafoodPrice}</span>
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        {/* Addons Section */}
-        {categoryAddons.length > 0 && (
+        {/* Portions Choice */}
+        {item.hasPortions && (
           <div className="mb-5">
-            <label className="block text-xs font-black text-gray-500 mb-2 uppercase">Add-ons (Optional)</label>
-            <div className="space-y-2">
-              {categoryAddons.map(addon => {
-                const isSelected = selectedAddons.some(a => a.id === addon.id);
-                return (
-                  <button
-                    key={addon.id}
-                    onClick={() => toggleAddon(addon)}
-                    className={`w-full p-3 rounded-xl font-bold transition-all flex items-center justify-between border-2 ${
-                      isSelected 
-                        ? 'bg-orange-50 border-[#F57C00] text-gray-900' 
-                        : 'bg-white border-gray-200 text-gray-700 hover:border-orange-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                        isSelected ? 'bg-[#F57C00] border-[#F57C00]' : 'border-gray-300'
-                      }`}>
-                        {isSelected && <CheckCircle size={14} className="text-white" />}
-                      </div>
-                      <span>{addon.name}</span>
-                    </div>
-                    <span className="text-[#F57C00] font-black">+₹{addon.price}</span>
-                  </button>
-                );
-              })}
+            <label className="block text-xs font-black text-gray-500 mb-2 uppercase">Choose Portion *</label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPortionChoice('HALF')}
+                className={`flex-1 py-3 rounded-xl font-black transition-all flex flex-col items-center gap-1 border-2 ${
+                  portionChoice === 'HALF' 
+                    ? 'bg-[#F57C00] text-white border-[#F57C00] shadow-lg shadow-orange-200' 
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+                }`}
+              >
+                <span className={`w-3 h-3 rounded-full ${portionChoice === 'HALF' ? 'bg-white' : 'bg-[#F57C00]'}`}></span>
+                <span className="text-sm">Half</span>
+                <span className="text-xs opacity-80">₹{item.halfPrice}</span>
+              </button>
+              <button
+                onClick={() => setPortionChoice('FULL')}
+                className={`flex-1 py-3 rounded-xl font-black transition-all flex flex-col items-center gap-1 border-2 ${
+                  portionChoice === 'FULL' 
+                    ? 'bg-[#F57C00] text-white border-[#F57C00] shadow-lg shadow-orange-200' 
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+                }`}
+              >
+                <span className={`w-3 h-3 rounded-full ${portionChoice === 'FULL' ? 'bg-white' : 'bg-[#F57C00]'}`}></span>
+                <span className="text-sm">Full</span>
+                <span className="text-xs opacity-80">₹{item.vegType === 'BOTH' && vegChoice === 'VEG' ? item.vegPrice : item.vegType === 'BOTH' && vegChoice === 'NON_VEG' ? item.nonVegPrice : item.vegType === 'BOTH' && vegChoice === 'SEAFOOD' ? item.seafoodPrice : item.price}</span>
+              </button>
             </div>
           </div>
         )}
+
+
 
         {/* Total and Confirm */}
         <div className="border-t pt-4">
@@ -159,7 +167,7 @@ const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, categoryAddon
           </div>
           <button
             onClick={handleConfirm}
-            disabled={item.vegType === 'BOTH' && !vegChoice}
+            disabled={(item.vegType === 'BOTH' && !vegChoice) || (item.hasPortions && !portionChoice)}
             className="w-full py-4 bg-[#F57C00] hover:bg-orange-600 text-white rounded-xl font-black transition-all shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Add to Cart
@@ -205,7 +213,6 @@ interface BillingScreenProps {
   tables: Table[];
   floors?: Floor[];
   tableCarts: Record<string, TableCart>;
-  addons: Addon[];
   onCreateOrder: (order: Order) => void;
   onUpdateTableStatus: (tableId: string, status: Table['status'], currentOrderId?: string) => void;
   onUpdateTableCarts: (tableCarts: Record<string, TableCart>) => void;
@@ -223,7 +230,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   tables,
   floors = [],
   tableCarts,
-  addons,
   onCreateOrder,
   onUpdateTableStatus,
   onUpdateTableCarts,
@@ -337,48 +343,55 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     return filtered;
   }, [selectedCategoryId, menuItems, menuSearchQuery]);
 
-  // Get addons for the current category
-  const getCategoryAddons = (categoryId: string) => {
-    return addons.filter(a => a.categoryId === categoryId);
-  };
+
 
   const handleAddItem = (item: MenuItem) => {
-    const categoryAddons = getCategoryAddons(item.categoryId);
-    
-    // If item has both veg/non-veg options OR has category-specific addons, show popup
-    if (item.vegType === 'BOTH' || categoryAddons.length > 0) {
+    // If item has both veg/non-veg options OR portions, show popup
+    if (item.vegType === 'BOTH' || item.hasPortions) {
       setOptionsItem(item);
       return;
     }
     addToCart(item);
   };
 
-  const handleItemOptions = (vegChoice: 'VEG' | 'NON_VEG' | null, selectedAddons: SelectedAddon[]) => {
+  const handleItemOptions = (vegChoice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null) => {
     if (!optionsItem) return;
-    addToCart(optionsItem, vegChoice, selectedAddons);
+    addToCart(optionsItem, vegChoice, portionChoice);
     setOptionsItem(null);
   };
 
-  const addToCart = (item: MenuItem, vegChoice?: 'VEG' | 'NON_VEG' | null, selectedAddons?: SelectedAddon[]) => {
-    // Create unique id for items with veg choice and addons
-    const addonsKey = selectedAddons && selectedAddons.length > 0 
-      ? `-addons-${selectedAddons.map(a => a.id).sort().join('-')}`
-      : '';
-    const cartItemId = vegChoice 
-      ? `${item.id}-${vegChoice}${addonsKey}` 
-      : `${item.id}${addonsKey}`;
+  const addToCart = (item: MenuItem, vegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice?: 'HALF' | 'FULL' | null) => {
+    // Create unique id for items with veg choice and portions
+    const choiceKey = vegChoice ? `-${vegChoice}` : '';
+    const portionKey = portionChoice ? `-${portionChoice}` : '';
+    const cartItemId = `${item.id}${choiceKey}${portionKey}`;
     
-    // Calculate item price with addons
+    // Calculate item price
     let itemPrice = item.price;
     if (vegChoice === 'VEG' && item.vegPrice) {
       itemPrice = item.vegPrice;
     } else if (vegChoice === 'NON_VEG' && item.nonVegPrice) {
       itemPrice = item.nonVegPrice;
+    } else if (vegChoice === 'SEAFOOD' && item.seafoodPrice) {
+      itemPrice = item.seafoodPrice;
     }
     
-    const addonsTotal = selectedAddons ? selectedAddons.reduce((sum, a) => sum + a.price, 0) : 0;
-    const totalItemPrice = itemPrice + addonsTotal;
+    // Apply half price shortcut if applicable
+    if (item.hasPortions && portionChoice === 'HALF' && item.halfPrice) {
+      itemPrice = item.halfPrice;
+    }
     
+    const totalItemPrice = itemPrice;
+    
+    // Append to carts...
+    const composeItem = (baseItem: CartItem) => ({ 
+      ...baseItem, 
+      id: cartItemId, 
+      price: totalItemPrice,
+      selectedVegChoice: vegChoice || undefined,
+      selectedPortion: portionChoice || undefined
+    });
+
     if (orderType === 'DINE_IN' && selectedTableId) {
       const currentItems = toCartItemsArray(tableCarts[selectedTableId]?.items);
       const existing = currentItems.find(i => i.id === cartItemId);
@@ -391,14 +404,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       } else {
         updateTableCart(selectedTableId, (cart) => ({
           ...cart,
-          items: [...cart.items, { 
-            ...item, 
-            id: cartItemId, 
-            price: totalItemPrice,
-            quantity: 1, 
-            selectedVegChoice: vegChoice || undefined,
-            selectedAddons: selectedAddons || []
-          }]
+          items: [...cart.items, composeItem({ ...item, quantity: 1 } as CartItem)]
         }));
       }
       
@@ -413,14 +419,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         if (existing) {
           return prev.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1 } : i);
         }
-        return [...prev, { 
-          ...item, 
-          id: cartItemId, 
-          price: totalItemPrice,
-          quantity: 1, 
-          selectedVegChoice: vegChoice || undefined,
-          selectedAddons: selectedAddons || []
-        }];
+        return [...prev, composeItem({ ...item, quantity: 1 } as CartItem)];
       });
     }
   };
@@ -549,11 +548,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           </div>
           ${order.items.map(it => `
             <div class="row">
-              <span class="item-name">${it.name}</span>
+              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
               <span class="qty">${it.quantity}</span>
               <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
-            ${it.selectedAddons?.length ? `<div class="addon-row">+ ${it.selectedAddons.map(a => a.name).join(', ')}</div>` : ''}
+
           `).join('')}
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
@@ -698,7 +697,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         {optionsItem && (
           <ItemOptionsPopup
             item={optionsItem}
-            categoryAddons={getCategoryAddons(optionsItem.categoryId)}
             onConfirm={handleItemOptions}
             onClose={() => setOptionsItem(null)}
           />
@@ -819,7 +817,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 ) : (
                   <div className="space-y-3">
                     {filteredItems.map(item => {
-                      const itemHasOptions = item.vegType === 'BOTH' || getCategoryAddons(item.categoryId).length > 0;
+                      const itemHasOptions = item.vegType === 'BOTH' || item.hasPortions;
                       const cartEntry = !itemHasOptions ? currentCart.find(ci => ci.id === item.id) : undefined;
                       return (
                         <div key={item.id} className="bg-white rounded-2xl border shadow-sm p-3 flex items-center gap-3">
@@ -906,12 +904,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   {currentCart.map(item => (
                     <div key={item.id} className="bg-white p-3 rounded-xl shadow-sm flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="font-bold text-sm text-gray-900 truncate">{item.name}</div>
-                        {item.selectedAddons && item.selectedAddons.length > 0 && (
-                          <div className="text-[10px] text-orange-600 font-bold">
-                            + {item.selectedAddons.map(a => a.name).join(', ')}
-                          </div>
-                        )}
+                        <div className="text-sm font-bold text-gray-900 truncate">{item.name}</div>
                         <div className="text-[11px] text-gray-500 font-medium">₹{item.price} each</div>
                       </div>
                       <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1">
@@ -1002,7 +995,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       {optionsItem && (
         <ItemOptionsPopup
           item={optionsItem}
-          categoryAddons={getCategoryAddons(optionsItem.categoryId)}
           onConfirm={handleItemOptions}
           onClose={() => setOptionsItem(null)}
         />
@@ -1223,21 +1215,22 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               <div key={item.id} className="flex gap-3 items-center group animate-in fade-in slide-in-from-right-2 duration-200">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className={`shrink-0 w-2 h-2 rounded-full ${item.isVeg || item.selectedVegChoice === 'VEG' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    <span className={`shrink-0 w-2 h-2 rounded-full ${item.selectedVegChoice === 'SEAFOOD' ? 'bg-blue-500' : (item.isVeg || item.selectedVegChoice === 'VEG') ? 'bg-green-500' : 'bg-red-500'}`}></span>
                     <h4 className="font-bold text-gray-800 truncate text-sm">
                       {item.name}
+                      {item.selectedPortion && (
+                        <span className="ml-1 opacity-70">
+                          ({item.selectedPortion === 'HALF' ? 'Half' : 'Full'})
+                        </span>
+                      )}
                       {item.selectedVegChoice && (
-                        <span className={`ml-1 text-[10px] font-black ${item.selectedVegChoice === 'VEG' ? 'text-green-600' : 'text-red-600'}`}>
-                          ({item.selectedVegChoice === 'VEG' ? 'V' : 'NV'})
+                        <span className={`ml-1 text-[10px] font-black ${item.selectedVegChoice === 'VEG' ? 'text-green-600' : item.selectedVegChoice === 'SEAFOOD' ? 'text-blue-600' : 'text-red-600'}`}>
+                          ({item.selectedVegChoice === 'VEG' ? 'V' : item.selectedVegChoice === 'SEAFOOD' ? 'SF' : 'NV'})
                         </span>
                       )}
                     </h4>
                   </div>
-                  {item.selectedAddons && item.selectedAddons.length > 0 && (
-                    <p className="text-[10px] text-orange-600 font-bold">
-                      + {item.selectedAddons.map(a => a.name).join(', ')}
-                    </p>
-                  )}
+
                   <p className="text-[11px] text-gray-500 font-medium">₹{item.price} per unit</p>
                 </div>
                 <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1 shadow-sm">

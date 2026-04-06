@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, Save, X, Utensils, Tag, Store, Percent, LayoutGrid, RefreshCw, Database, Package } from 'lucide-react';
-import { MenuItem, Category, RestaurantInfo, Table, VegType, Addon, Floor } from '../types';
+import { MenuItem, Category, RestaurantInfo, Table, VegType, Floor } from '../types';
 
 interface MenuManagementProps {
   categories: Category[];
@@ -10,7 +10,6 @@ interface MenuManagementProps {
   restaurantInfo: RestaurantInfo;
   tables: Table[];
   floors: Floor[];
-  addons: Addon[];
   setTaxRate: (rate: number) => void;
   setDrinkTaxRate: (rate: number) => void;
   setRestaurantInfo: (info: RestaurantInfo) => void;
@@ -25,10 +24,8 @@ interface MenuManagementProps {
   onDeleteTable: (id: string) => void;
   onAddFloor: (name: string) => void;
   onDeleteFloor: (id: string) => void;
-  onAddAddon: (addon: Addon) => void;
-  onUpdateAddon: (addon: Addon) => void;
-  onDeleteAddon: (id: string) => void;
   onResetMenuDatabase?: () => void;
+  onFactoryReset?: () => void;
 }
 
 const MenuManagement: React.FC<MenuManagementProps> = ({ 
@@ -39,7 +36,6 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   restaurantInfo,
   tables,
   floors,
-  addons,
   setTaxRate,
   setDrinkTaxRate,
   setRestaurantInfo,
@@ -54,12 +50,10 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   onDeleteTable,
   onAddFloor,
   onDeleteFloor,
-  onAddAddon,
-  onUpdateAddon,
-  onDeleteAddon,
-  onResetMenuDatabase
+  onResetMenuDatabase,
+  onFactoryReset
 }) => {
-  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'ADDONS' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
+  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
   const [searchTerm, setSearchTerm] = useState('');
   const [newTableName, setNewTableName] = useState('');
   const [newTableFloorId, setNewTableFloorId] = useState('');
@@ -74,19 +68,12 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
-  const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
-  const [editingAddon, setEditingAddon] = useState<Addon | null>(null);
 
-  // Addon form state
-  const [newAddonName, setNewAddonName] = useState('');
-  const [newAddonPrice, setNewAddonPrice] = useState('');
-  const [newAddonCategoryId, setNewAddonCategoryId] = useState('');
-
-  // Item form state
   const [itemVegType, setItemVegType] = useState<VegType>('VEG');
   const [itemCategoryId, setItemCategoryId] = useState('');
+  const [itemHasPortions, setItemHasPortions] = useState(false);
 
   const [localRestaurantInfo, setLocalRestaurantInfo] = useState<RestaurantInfo>(restaurantInfo);
 
@@ -101,6 +88,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
     }
     setEditingItem(item || null);
     setItemVegType(item?.vegType || 'VEG');
+    setItemHasPortions(item?.hasPortions || false);
     // Set the category - use item's category if editing, otherwise use first category (required for billing screen)
     const defaultCatId = categories.length > 0 ? categories[0].id : '';
     setItemCategoryId(item?.categoryId || defaultCatId);
@@ -119,46 +107,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
     setIsCatModalOpen(true);
   };
 
-  const handleOpenAddonModal = (addon?: Addon) => {
-    if (addon) {
-      setEditingAddon(addon);
-      setNewAddonName(addon.name);
-      setNewAddonPrice(addon.price.toString());
-      setNewAddonCategoryId(addon.categoryId);
-    } else {
-      setEditingAddon(null);
-      setNewAddonName('');
-      setNewAddonPrice('');
-      setNewAddonCategoryId(categories.length > 0 ? categories[0].id : '');
-    }
-    setIsAddonModalOpen(true);
-  };
 
-  const handleSaveAddon = () => {
-    if (!newAddonName.trim() || !newAddonPrice || !newAddonCategoryId) {
-      alert('Please fill all fields');
-      return;
-    }
-    
-    const addonData: Addon = {
-      id: editingAddon?.id || `addon_${Date.now()}`,
-      name: newAddonName.trim(),
-      price: parseFloat(newAddonPrice),
-      categoryId: newAddonCategoryId
-    };
-
-    if (editingAddon) {
-      onUpdateAddon(addonData);
-    } else {
-      onAddAddon(addonData);
-    }
-
-    setIsAddonModalOpen(false);
-    setEditingAddon(null);
-    setNewAddonName('');
-    setNewAddonPrice('');
-    setNewAddonCategoryId('');
-  };
 
   const handleSaveRestaurantProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,16 +122,15 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           <h1 className="text-2xl font-black text-gray-900">Configuration</h1>
           <p className="text-sm text-gray-800 font-bold">Manage your menu, categories, and business rules</p>
         </div>
-        {(activeTab === 'ITEMS' || activeTab === 'CATEGORIES' || activeTab === 'ADDONS') && (
+        {(activeTab === 'ITEMS' || activeTab === 'CATEGORIES') && (
           <button 
             onClick={() => {
               if (activeTab === 'ITEMS') handleOpenItemModal();
               else if (activeTab === 'CATEGORIES') handleOpenCatModal();
-              else if (activeTab === 'ADDONS') handleOpenAddonModal();
             }}
             className="flex items-center gap-2 bg-[#F57C00] text-white px-6 py-2.5 rounded-xl font-black hover:bg-orange-600 transition-all shadow-lg shadow-orange-200"
           >
-            <Plus size={20} /> Add New {activeTab === 'ITEMS' ? 'Item' : activeTab === 'CATEGORIES' ? 'Category' : 'Addon'}
+            <Plus size={20} /> Add New {activeTab === 'ITEMS' ? 'Item' : 'Category'}
           </button>
         )}
       </div>
@@ -192,7 +140,6 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           <TabItem label="Menu Items" active={activeTab === 'ITEMS'} onClick={() => setActiveTab('ITEMS')} icon={<Utensils size={18} />} />
           <TabItem label="Categories" active={activeTab === 'CATEGORIES'} onClick={() => setActiveTab('CATEGORIES')} icon={<Tag size={18} />} />
           <TabItem label="Drinks" active={activeTab === 'DRINKS'} onClick={() => setActiveTab('DRINKS')} icon={<Utensils size={18} />} />
-          <TabItem label="Addons" active={activeTab === 'ADDONS'} onClick={() => setActiveTab('ADDONS')} icon={<Package size={18} />} />
           <TabItem label="Tables" active={activeTab === 'TABLES'} onClick={() => setActiveTab('TABLES')} icon={<LayoutGrid size={18} />} />
           <TabItem label="Taxes & Charges" active={activeTab === 'TAXES'} onClick={() => setActiveTab('TAXES')} icon={<Percent size={18} />} />
           <TabItem label="Restaurant Profile" active={activeTab === 'RESTAURANT'} onClick={() => setActiveTab('RESTAURANT')} icon={<Store size={18} />} />
@@ -325,57 +272,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
             </div>
           )}
 
-          {activeTab === 'ADDONS' && (
-            <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
-              {/* Group addons by category */}
-              {categories.map(cat => {
-                const categoryAddons = addons.filter(a => a.categoryId === cat.id);
-                if (categoryAddons.length === 0) return null;
-                
-                return (
-                  <div key={cat.id} className="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-                      <h3 className="font-black text-gray-900">{cat.name}</h3>
-                      <p className="text-xs text-gray-500 font-bold">{categoryAddons.length} addon(s)</p>
-                    </div>
-                    <div className="p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {categoryAddons.map(addon => (
-                          <div key={addon.id} className="p-4 border-2 border-gray-200 bg-gray-50 rounded-xl flex items-center justify-between hover:border-[#F57C00] group transition-all">
-                            <div>
-                              <span className="font-black text-gray-900">{addon.name}</span>
-                              <span className="ml-3 text-orange-600 font-black">₹{addon.price}</span>
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleOpenAddonModal(addon)} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={14} /></button>
-                              <button onClick={() => onDeleteAddon(addon.id)} className="p-2 text-gray-900 hover:text-red-500"><Trash2 size={14} /></button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
 
-              {/* Show categories with no addons */}
-              {addons.length === 0 && (
-                <div className="text-center py-12 text-gray-500">
-                  <Package size={48} className="mx-auto mb-4 opacity-50" />
-                  <p className="font-black">No addons configured yet</p>
-                  <p className="text-sm">Click "Add New Addon" to create category-specific addons</p>
-                </div>
-              )}
-
-              {/* Quick info about addons */}
-              <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                <p className="text-sm text-blue-800 font-bold">
-                  <strong>💡 Tip:</strong> Addons are category-specific extras that customers can add to their order. 
-                  When selecting an item from a category with addons, customers will see these addon options along with veg/non-veg choice.
-                </p>
-              </div>
-            </div>
-          )}
 
           {activeTab === 'TABLES' && (
             <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
@@ -642,7 +539,8 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           )}
 
           {activeTab === 'DATABASE' && (
-            <div className="max-w-2xl mx-auto space-y-6">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-w-2xl mx-auto space-y-6 pb-8">
               {/* Reset Menu Database Section */}
               <div className="p-8 border-2 border-orange-200 rounded-2xl bg-orange-50/50 shadow-sm">
                 <div className="flex items-start gap-4">
@@ -657,8 +555,8 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                     <div className="bg-white p-4 rounded-xl border mb-4">
                       <h4 className="font-bold text-gray-900 mb-2">New Menu Summary:</h4>
                       <ul className="text-sm text-gray-600 space-y-1">
-                        <li>• <strong>12 Categories:</strong> Power Up W Greens, Eggilicious, Humming Hummus, Pasta, Sandwiches, Smokin Grill, House of Keema, Wraps Rolls & Quesadilla, Meals & More, Beverages, Smoothies & Bowls, Dessert</li>
-                        <li>• <strong>93 Menu Items</strong> with veg/non-veg dual pricing support</li>
+                        <li>• <strong>26 Categories:</strong> Gavathi Lapeta, Agri Handi, Oriental Main Course, Chinese, Sindhi Specialities, Seafood, Tandoori, Biryani, and more.</li>
+                        <li>• <strong>140+ Menu Items</strong> including portions (Half/Full), multi-type (Veg/Non-Veg/Seafood), and APS support.</li>
                       </ul>
                     </div>
                     <button
@@ -671,6 +569,32 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                     >
                       <Database size={20} />
                       Reset & Sync New Menu
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Wipe Database Section */}
+              <div className="p-8 border-2 border-red-200 rounded-2xl bg-red-50 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-red-100 rounded-xl">
+                    <Trash2 size={28} className="text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-black text-gray-900 mb-2">Wipe Entire Database</h3>
+                    <p className="text-sm text-gray-600 mb-4 font-bold">
+                      CRITICAL: This will permanently delete ALL menu items, categories, orders, and table data. This is useful for starting a fresh restaurant with an empty menu.
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (confirm('DANGER: This will delete everything (Menu, Orders, Tables). This cannot be undone. Are you absolutely sure?')) {
+                          onFactoryReset?.();
+                        }
+                      }}
+                      className="px-6 py-3 bg-red-500 text-white rounded-xl font-black hover:bg-red-700 transition-all flex items-center gap-2 shadow-lg"
+                    >
+                      <Trash2 size={20} />
+                      Wipe Everything & Start Fresh
                     </button>
                   </div>
                 </div>
@@ -707,76 +631,12 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 </p>
               </div>
             </div>
+          </div>
           )}
         </div>
       </div>
 
-      {/* Addon Modal */}
-      {isAddonModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border-2 border-gray-100">
-            <div className="bg-gray-50 p-6 border-b-2 border-gray-200 flex justify-between items-center">
-              <h3 className="text-2xl font-black text-gray-900">{editingAddon ? 'Edit' : 'Add'} Addon</h3>
-              <button onClick={() => setIsAddonModalOpen(false)} className="text-gray-900 hover:text-[#F57C00] transition-colors"><X size={28} /></button>
-            </div>
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Addon Name *</label>
-                <input 
-                  type="text"
-                  value={newAddonName}
-                  onChange={(e) => setNewAddonName(e.target.value)}
-                  placeholder="e.g., Extra Cheese"
-                  className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Price (₹) *</label>
-                <input 
-                  type="number"
-                  value={newAddonPrice}
-                  onChange={(e) => setNewAddonPrice(e.target.value)}
-                  placeholder="e.g., 30"
-                  min="0"
-                  step="1"
-                  className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Apply to Category *</label>
-                <select
-                  value={newAddonCategoryId}
-                  onChange={(e) => setNewAddonCategoryId(e.target.value)}
-                  className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner bg-white"
-                >
-                  <option value="">Select Category</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-2">This addon will appear only for items in the selected category</p>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button 
-                  type="button"
-                  onClick={() => setIsAddonModalOpen(false)}
-                  className="flex-1 py-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black hover:bg-gray-100 transition-all"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleSaveAddon}
-                  disabled={!newAddonName.trim() || !newAddonPrice || !newAddonCategoryId}
-                  className="flex-1 py-4 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Save size={20} /> {editingAddon ? 'Update' : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Item Modal */}
       {isItemModalOpen && (
@@ -796,6 +656,8 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                   ? (vegPrice || 0) // Default to veg price
                   : parseFloat(formData.get('price') as string);
                 
+                const halfPrice = itemHasPortions ? parseFloat(formData.get('halfPrice') as string) : undefined;
+                
                 // Use the controlled state value for categoryId
                 const categoryId = itemCategoryId;
                 console.log('MenuManagement - Saving item with categoryId:', categoryId);
@@ -814,7 +676,9 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                   isVeg: itemVegType === 'VEG',
                   vegType: itemVegType,
                   vegPrice: vegPrice,
-                  nonVegPrice: nonVegPrice
+                  nonVegPrice: nonVegPrice,
+                  hasPortions: itemHasPortions,
+                  halfPrice: halfPrice
                 };
                 console.log('MenuManagement - Item data being saved:', itemData);
                 if (editingItem) {
@@ -886,6 +750,19 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 </div>
               </div>
 
+              {/* Portions Toggle */}
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer font-black text-gray-900 border-2 border-gray-200 p-4 rounded-xl hover:bg-gray-50 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={itemHasPortions}
+                    onChange={(e) => setItemHasPortions(e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-300 text-[#F57C00] focus:ring-[#F57C00]"
+                  />
+                  <span>Has Half / Full Portions?</span>
+                </label>
+              </div>
+
               {/* Price Fields - Conditional based on vegType */}
               {itemVegType === 'BOTH' ? (
                 <div className="grid grid-cols-2 gap-4">
@@ -919,17 +796,48 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       className="w-full p-4 bg-white border-2 border-red-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-red-500 outline-none shadow-inner" 
                     />
                   </div>
+                  {itemHasPortions && (
+                     <div className="col-span-2">
+                       <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider flex items-center gap-2">Half Portion Price (₹)</label>
+                       <input 
+                         name="halfPrice" 
+                         type="number" 
+                         defaultValue={editingItem?.halfPrice} 
+                         required 
+                         className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                       />
+                     </div>
+                  )}
                 </div>
               ) : (
-                <div>
-                  <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Price (₹)</label>
-                  <input 
-                    name="price" 
-                    type="number" 
-                    defaultValue={editingItem?.price} 
-                    required 
-                    className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
-                  />
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">
+                       {itemHasPortions ? 'Full Portion Price (₹)' : 'Price (₹)'}
+                    </label>
+                    <input 
+                      name="price" 
+                      type="number" 
+                      defaultValue={editingItem?.price} 
+                      required 
+                      className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                    />
+                  </div>
+                  
+                  {itemHasPortions && (
+                     <div>
+                       <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">
+                         Half Portion Price (₹)
+                       </label>
+                       <input 
+                         name="halfPrice" 
+                         type="number" 
+                         defaultValue={editingItem?.halfPrice} 
+                         required 
+                         className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                       />
+                     </div>
+                  )}
                 </div>
               )}
 

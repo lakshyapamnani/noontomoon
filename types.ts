@@ -25,7 +25,7 @@ export interface RestaurantInfo {
   gstNo?: string;
 }
 
-export type VegType = 'VEG' | 'NON_VEG' | 'BOTH';
+export type VegType = 'VEG' | 'NON_VEG' | 'SEAFOOD' | 'BOTH';
 
 export interface MenuItem {
   id: string;
@@ -36,6 +36,9 @@ export interface MenuItem {
   vegType: VegType;
   vegPrice?: number;
   nonVegPrice?: number;
+  seafoodPrice?: number;
+  hasPortions?: boolean;
+  halfPrice?: number;
   image?: string;
   quantityStr?: string;
 }
@@ -46,23 +49,10 @@ export interface Category {
   type?: 'FOOD' | 'DRINK';
 }
 
-export interface Addon {
-  id: string;
-  name: string;
-  price: number;
-  categoryId: string; // Which category this addon applies to
-}
-
-export interface SelectedAddon {
-  id: string;
-  name: string;
-  price: number;
-}
-
 export interface CartItem extends MenuItem {
   quantity: number;
-  selectedVegChoice?: 'VEG' | 'NON_VEG';
-  selectedAddons?: SelectedAddon[];
+  selectedVegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD';
+  selectedPortion?: 'HALF' | 'FULL';
 }
 
 export interface Order {
