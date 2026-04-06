@@ -5,14 +5,14 @@ import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBhKZFbLGq8MVmg_Ln0N4SoG6NUq_eZtk0",
-  authDomain: "livin-healthy.firebaseapp.com",
-  databaseURL: "https://livin-healthy-default-rtdb.firebaseio.com",
-  projectId: "livin-healthy",
-  storageBucket: "livin-healthy.firebasestorage.app",
-  messagingSenderId: "802846930621",
-  appId: "1:802846930621:web:61cd269c5dcbde277ba9d4",
-  measurementId: "G-Q3JNXJSP9C"
+  apiKey: "AIzaSyA-CC1rbMiUzhaGXclen8nhvd0A5IGdVp0",
+  authDomain: "noon-to-moon.firebaseapp.com",
+  databaseURL: "https://noon-to-moon-default-rtdb.firebaseio.com",
+  projectId: "noon-to-moon",
+  storageBucket: "noon-to-moon.firebasestorage.app",
+  messagingSenderId: "463718515822",
+  appId: "1:463718515822:web:76e4dba2c2ba287b8c927f",
+  measurementId: "G-S8QF41YC97"
 };
 
 const app = initializeApp(firebaseConfig);

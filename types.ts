@@ -3,21 +3,29 @@ export type OrderStatus = 'PLACED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANC
 export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'DUE' | 'PART';
 export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
 
+export interface Floor {
+  id: string;
+  name: string;
+  sortOrder?: number;
+}
+
 export interface Table {
   id: string;
   name: string;
   status: TableStatus;
   currentOrderId?: string;
   capacity?: number;
+  floorId?: string;
 }
 
 export interface RestaurantInfo {
   name: string;
   phone: string;
   address: string;
+  gstNo?: string;
 }
 
-export type VegType = 'VEG' | 'NON_VEG' | 'BOTH';
+export type VegType = 'VEG' | 'NON_VEG' | 'SEAFOOD' | 'BOTH';
 
 export interface MenuItem {
   id: string;
@@ -28,31 +36,23 @@ export interface MenuItem {
   vegType: VegType;
   vegPrice?: number;
   nonVegPrice?: number;
+  seafoodPrice?: number;
+  hasPortions?: boolean;
+  halfPrice?: number;
   image?: string;
+  quantityStr?: string;
 }
 
 export interface Category {
   id: string;
   name: string;
-}
-
-export interface Addon {
-  id: string;
-  name: string;
-  price: number;
-  categoryId: string; // Which category this addon applies to
-}
-
-export interface SelectedAddon {
-  id: string;
-  name: string;
-  price: number;
+  type?: 'FOOD' | 'DRINK';
 }
 
 export interface CartItem extends MenuItem {
   quantity: number;
-  selectedVegChoice?: 'VEG' | 'NON_VEG';
-  selectedAddons?: SelectedAddon[];
+  selectedVegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD';
+  selectedPortion?: 'HALF' | 'FULL';
 }
 
 export interface Order {

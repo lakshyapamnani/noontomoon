@@ -106,7 +106,7 @@ const AuthScreen: React.FC = () => {
     }
   };
 
-  const upiUrl = `upi://pay?pa=${UPI_ID}&pn=Drona%20POS&am=${selectedPlan.price}&cu=INR&tn=Drona%20POS%20${selectedPlan.label}%20Plan`;
+  const upiUrl = `upi://pay?pa=${UPI_ID}&pn=Noon%20To%20Moon%20POS&am=${selectedPlan.price}&cu=INR&tn=Noon%20To%20Moon%20POS%20${selectedPlan.label}%20Plan`;
 
   // Payment / Plan Selection Screen
   if (showPayment) {
@@ -115,11 +115,11 @@ const AuthScreen: React.FC = () => {
         <div className="w-full max-w-lg mx-auto py-6 pb-10">
           {/* Logo */}
           <div className="text-center mb-6">
-            <div className="w-14 h-14 bg-[#F57C00] rounded-2xl flex items-center justify-center font-bold text-2xl text-white mx-auto mb-3 shadow-lg shadow-orange-200">
-              D
+            <div className="w-14 h-14 bg-[#F57C00] rounded-2xl flex items-center justify-center font-bold text-lg text-white mx-auto mb-3 shadow-lg shadow-orange-200">
+              NM
             </div>
             <h1 className="text-2xl font-black tracking-tight text-gray-900">
-              DRONA <span className="text-[#F57C00]">POS</span>
+              NOON TO MOON <span className="text-[#F57C00]">POS</span>
             </h1>
           </div>
 
@@ -211,11 +211,11 @@ const AuthScreen: React.FC = () => {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-[#F57C00] rounded-2xl flex items-center justify-center font-bold text-3xl text-white mx-auto mb-4 shadow-lg shadow-orange-200">
-            D
+          <div className="w-16 h-16 bg-[#F57C00] rounded-2xl flex items-center justify-center font-bold text-xl text-white mx-auto mb-4 shadow-lg shadow-orange-200">
+            NM
           </div>
           <h1 className="text-3xl font-black tracking-tight text-gray-900">
-            DRONA <span className="text-[#F57C00]">POS</span>
+            NOON TO MOON <span className="text-[#F57C00]">POS</span>
           </h1>
           <p className="text-gray-500 text-sm mt-1 font-medium">Restaurant Point of Sale</p>
         </div>

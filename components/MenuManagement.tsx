@@ -1,38 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, Save, X, Utensils, Tag, Store, Percent, LayoutGrid, RefreshCw, Database, Package } from 'lucide-react';
-import { MenuItem, Category, RestaurantInfo, Table, VegType, Addon } from '../types';
+import { MenuItem, Category, RestaurantInfo, Table, VegType, Floor } from '../types';
 
 interface MenuManagementProps {
   categories: Category[];
   menuItems: MenuItem[];
   taxRate: number;
+  drinkTaxRate: number;
   restaurantInfo: RestaurantInfo;
   tables: Table[];
-  addons: Addon[];
+  floors: Floor[];
   setTaxRate: (rate: number) => void;
+  setDrinkTaxRate: (rate: number) => void;
   setRestaurantInfo: (info: RestaurantInfo) => void;
   onAddMenuItem: (item: Omit<MenuItem, 'id'>) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
   onDeleteMenuItem: (id: string) => void;
-  onAddCategory: (name: string) => void;
+  onAddCategory: (name: string, type?: 'FOOD' | 'DRINK') => void;
   onUpdateCategory: (cat: Category) => void;
   onDeleteCategory: (id: string) => void;
-  onAddTable: (name: string) => void;
+  onAddTable: (name: string, floorId?: string) => void;
+  onUpdateTable: (table: Table) => void;
   onDeleteTable: (id: string) => void;
-  onAddAddon: (addon: Addon) => void;
-  onUpdateAddon: (addon: Addon) => void;
-  onDeleteAddon: (id: string) => void;
+  onAddFloor: (name: string) => void;
+  onDeleteFloor: (id: string) => void;
   onResetMenuDatabase?: () => void;
+  onFactoryReset?: () => void;
 }
 
 const MenuManagement: React.FC<MenuManagementProps> = ({ 
   categories, 
   menuItems, 
   taxRate,
+  drinkTaxRate,
   restaurantInfo,
   tables,
-  addons,
+  floors,
   setTaxRate,
+  setDrinkTaxRate,
   setRestaurantInfo,
   onAddMenuItem, 
   onUpdateMenuItem, 
@@ -41,31 +46,34 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   onUpdateCategory,
   onDeleteCategory,
   onAddTable,
+  onUpdateTable,
   onDeleteTable,
-  onAddAddon,
-  onUpdateAddon,
-  onDeleteAddon,
-  onResetMenuDatabase
+  onAddFloor,
+  onDeleteFloor,
+  onResetMenuDatabase,
+  onFactoryReset
 }) => {
-  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'ADDONS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
+  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
   const [searchTerm, setSearchTerm] = useState('');
   const [newTableName, setNewTableName] = useState('');
+  const [newTableFloorId, setNewTableFloorId] = useState('');
+  const [newFloorName, setNewFloorName] = useState('');
+  
+  const [isDrinkItemModalOpen, setIsDrinkItemModalOpen] = useState(false);
+  const [isDrinkCatModalOpen, setIsDrinkCatModalOpen] = useState(false);
+  const [editingDrinkItem, setEditingDrinkItem] = useState<MenuItem | null>(null);
+  const [editingDrinkCat, setEditingDrinkCat] = useState<Category | null>(null);
+  const drinkCategories = categories.filter(c => c.type === 'DRINK');
+  const drinkItems = menuItems.filter(i => drinkCategories.some(c => c.id === i.categoryId));
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
-  const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
-  const [editingAddon, setEditingAddon] = useState<Addon | null>(null);
 
-  // Addon form state
-  const [newAddonName, setNewAddonName] = useState('');
-  const [newAddonPrice, setNewAddonPrice] = useState('');
-  const [newAddonCategoryId, setNewAddonCategoryId] = useState('');
-
-  // Item form state
   const [itemVegType, setItemVegType] = useState<VegType>('VEG');
   const [itemCategoryId, setItemCategoryId] = useState('');
+  const [itemHasPortions, setItemHasPortions] = useState(false);
 
   const [localRestaurantInfo, setLocalRestaurantInfo] = useState<RestaurantInfo>(restaurantInfo);
 
@@ -80,6 +88,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
     }
     setEditingItem(item || null);
     setItemVegType(item?.vegType || 'VEG');
+    setItemHasPortions(item?.hasPortions || false);
     // Set the category - use item's category if editing, otherwise use first category (required for billing screen)
     const defaultCatId = categories.length > 0 ? categories[0].id : '';
     setItemCategoryId(item?.categoryId || defaultCatId);
@@ -98,46 +107,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
     setIsCatModalOpen(true);
   };
 
-  const handleOpenAddonModal = (addon?: Addon) => {
-    if (addon) {
-      setEditingAddon(addon);
-      setNewAddonName(addon.name);
-      setNewAddonPrice(addon.price.toString());
-      setNewAddonCategoryId(addon.categoryId);
-    } else {
-      setEditingAddon(null);
-      setNewAddonName('');
-      setNewAddonPrice('');
-      setNewAddonCategoryId(categories.length > 0 ? categories[0].id : '');
-    }
-    setIsAddonModalOpen(true);
-  };
 
-  const handleSaveAddon = () => {
-    if (!newAddonName.trim() || !newAddonPrice || !newAddonCategoryId) {
-      alert('Please fill all fields');
-      return;
-    }
-    
-    const addonData: Addon = {
-      id: editingAddon?.id || `addon_${Date.now()}`,
-      name: newAddonName.trim(),
-      price: parseFloat(newAddonPrice),
-      categoryId: newAddonCategoryId
-    };
-
-    if (editingAddon) {
-      onUpdateAddon(addonData);
-    } else {
-      onAddAddon(addonData);
-    }
-
-    setIsAddonModalOpen(false);
-    setEditingAddon(null);
-    setNewAddonName('');
-    setNewAddonPrice('');
-    setNewAddonCategoryId('');
-  };
 
   const handleSaveRestaurantProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,16 +122,15 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           <h1 className="text-2xl font-black text-gray-900">Configuration</h1>
           <p className="text-sm text-gray-800 font-bold">Manage your menu, categories, and business rules</p>
         </div>
-        {(activeTab === 'ITEMS' || activeTab === 'CATEGORIES' || activeTab === 'ADDONS') && (
+        {(activeTab === 'ITEMS' || activeTab === 'CATEGORIES') && (
           <button 
             onClick={() => {
               if (activeTab === 'ITEMS') handleOpenItemModal();
               else if (activeTab === 'CATEGORIES') handleOpenCatModal();
-              else if (activeTab === 'ADDONS') handleOpenAddonModal();
             }}
             className="flex items-center gap-2 bg-[#F57C00] text-white px-6 py-2.5 rounded-xl font-black hover:bg-orange-600 transition-all shadow-lg shadow-orange-200"
           >
-            <Plus size={20} /> Add New {activeTab === 'ITEMS' ? 'Item' : activeTab === 'CATEGORIES' ? 'Category' : 'Addon'}
+            <Plus size={20} /> Add New {activeTab === 'ITEMS' ? 'Item' : 'Category'}
           </button>
         )}
       </div>
@@ -170,7 +139,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
         <div className="flex border-b overflow-x-auto custom-scrollbar bg-gray-50/50">
           <TabItem label="Menu Items" active={activeTab === 'ITEMS'} onClick={() => setActiveTab('ITEMS')} icon={<Utensils size={18} />} />
           <TabItem label="Categories" active={activeTab === 'CATEGORIES'} onClick={() => setActiveTab('CATEGORIES')} icon={<Tag size={18} />} />
-          <TabItem label="Addons" active={activeTab === 'ADDONS'} onClick={() => setActiveTab('ADDONS')} icon={<Package size={18} />} />
+          <TabItem label="Drinks" active={activeTab === 'DRINKS'} onClick={() => setActiveTab('DRINKS')} icon={<Utensils size={18} />} />
           <TabItem label="Tables" active={activeTab === 'TABLES'} onClick={() => setActiveTab('TABLES')} icon={<LayoutGrid size={18} />} />
           <TabItem label="Taxes & Charges" active={activeTab === 'TAXES'} onClick={() => setActiveTab('TAXES')} icon={<Percent size={18} />} />
           <TabItem label="Restaurant Profile" active={activeTab === 'RESTAURANT'} onClick={() => setActiveTab('RESTAURANT')} icon={<Store size={18} />} />
@@ -239,96 +208,164 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           )}
 
           {activeTab === 'CATEGORIES' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {categories.map(cat => (
-                <div key={cat.id} className="p-6 border-2 border-gray-200 bg-white rounded-2xl flex items-center justify-between hover:bg-orange-50/30 hover:border-[#F57C00] transition-colors group shadow-sm">
-                  <span className="font-black text-gray-900">{cat.name}</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => handleOpenCatModal(cat)} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={16} /></button>
-                    <button onClick={() => onDeleteCategory(cat.id)} className="p-2 text-gray-900 hover:text-black"><Trash2 size={16} /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 'ADDONS' && (
-            <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar">
-              {/* Group addons by category */}
-              {categories.map(cat => {
-                const categoryAddons = addons.filter(a => a.categoryId === cat.id);
-                if (categoryAddons.length === 0) return null;
-                
-                return (
-                  <div key={cat.id} className="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-                      <h3 className="font-black text-gray-900">{cat.name}</h3>
-                      <p className="text-xs text-gray-500 font-bold">{categoryAddons.length} addon(s)</p>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {categories.map(cat => (
+                  <div key={cat.id} className="p-6 border-2 border-gray-200 bg-white rounded-2xl flex items-center justify-between hover:bg-orange-50/30 hover:border-[#F57C00] transition-colors group shadow-sm">
+                    <div className="flex flex-col">
+                      <span className="font-black text-gray-900">{cat.name}</span>
+                      <span className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-wider">{cat.type === 'DRINK' ? 'Drink' : 'Food'}</span>
                     </div>
-                    <div className="p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {categoryAddons.map(addon => (
-                          <div key={addon.id} className="p-4 border-2 border-gray-200 bg-gray-50 rounded-xl flex items-center justify-between hover:border-[#F57C00] group transition-all">
-                            <div>
-                              <span className="font-black text-gray-900">{addon.name}</span>
-                              <span className="ml-3 text-orange-600 font-black">₹{addon.price}</span>
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleOpenAddonModal(addon)} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={14} /></button>
-                              <button onClick={() => onDeleteAddon(addon.id)} className="p-2 text-gray-900 hover:text-red-500"><Trash2 size={14} /></button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleOpenCatModal(cat)} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={16} /></button>
+                      <button onClick={() => onDeleteCategory(cat.id)} className="p-2 text-gray-900 hover:text-black"><Trash2 size={16} /></button>
                     </div>
                   </div>
-                );
-              })}
-
-              {/* Show categories with no addons */}
-              {addons.length === 0 && (
-                <div className="text-center py-12 text-gray-500">
-                  <Package size={48} className="mx-auto mb-4 opacity-50" />
-                  <p className="font-black">No addons configured yet</p>
-                  <p className="text-sm">Click "Add New Addon" to create category-specific addons</p>
-                </div>
-              )}
-
-              {/* Quick info about addons */}
-              <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                <p className="text-sm text-blue-800 font-bold">
-                  <strong>💡 Tip:</strong> Addons are category-specific extras that customers can add to their order. 
-                  When selecting an item from a category with addons, customers will see these addon options along with veg/non-veg choice.
-                </p>
+                ))}
               </div>
             </div>
           )}
 
+          {activeTab === 'DRINKS' && (
+            <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1">
+              <div className="flex gap-4 mb-4">
+                <button onClick={() => { setEditingDrinkItem(null); setItemCategoryId(drinkCategories.length > 0 ? drinkCategories[0].id : ''); setIsDrinkItemModalOpen(true); }} className="bg-[#F57C00] text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"><Plus size={20} /> Add Drink Item</button>
+                <button onClick={() => { setEditingDrinkCat(null); setIsDrinkCatModalOpen(true); }} className="bg-white text-[#F57C00] border-2 border-[#F57C00] px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-orange-50 transition-all shadow-sm active:scale-95"><Plus size={20} /> Add Drink Category</button>
+              </div>
+              
+              <div>
+                <h3 className="text-xl font-black text-gray-900 mb-4 border-b-2 pb-2">Drink Categories</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {drinkCategories.map(cat => (
+                    <div key={cat.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl flex justify-between items-center group hover:border-[#F57C00] transition-colors shadow-sm">
+                      <span className="font-black text-gray-900">{cat.name}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => { setEditingDrinkCat(cat); setIsDrinkCatModalOpen(true); }} className="p-2 text-gray-900 hover:text-[#F57C00]"><Edit2 size={16} /></button>
+                        <button onClick={() => onDeleteCategory(cat.id)} className="p-2 text-gray-900 hover:text-black"><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-black text-gray-900 mt-6 mb-4 border-b-2 pb-2">Drink Items</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {drinkItems.map(item => (
+                    <div key={item.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl group hover:border-[#F57C00] transition-colors shadow-sm">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-black text-gray-900">{item.name}</h4>
+                          {item.quantityStr && <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>}
+                          <span className="text-xs text-gray-400 block mt-1">{categories.find(c => c.id === item.categoryId)?.name}</span>
+                        </div>
+                        <span className="font-black text-[#F57C00]">₹{item.price}</span>
+                      </div>
+                      <div className="flex justify-end gap-1 mt-4">
+                        <button onClick={() => { setEditingDrinkItem(item); setItemCategoryId(item.categoryId); setIsDrinkItemModalOpen(true); }} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
+                        <button onClick={() => onDeleteMenuItem(item.id)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+
+
           {activeTab === 'TABLES' && (
-            <div className="space-y-6">
+            <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-w-xl p-6 border-2 border-gray-200 rounded-2xl bg-white shadow-sm">
+                <h3 className="text-lg font-black text-gray-900 mb-4">Manage Floors</h3>
+                <div className="flex gap-3 mb-4">
+                  <input
+                    type="text"
+                    value={newFloorName}
+                    onChange={(e) => setNewFloorName(e.target.value)}
+                    placeholder="Enter floor name (e.g., Ground Floor)"
+                    className="flex-1 p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none placeholder:text-gray-400"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newFloorName.trim()) return;
+                      onAddFloor(newFloorName.trim());
+                      setNewFloorName('');
+                    }}
+                    disabled={!newFloorName.trim()}
+                    className="px-5 py-3 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Plus size={20} /> Add Floor
+                  </button>
+                </div>
+
+                {floors.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {floors
+                      .slice()
+                      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+                      .map((floor) => (
+                        <div key={floor.id} className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-gray-50 px-3 py-1.5">
+                          <span className="text-xs font-black text-gray-700 uppercase tracking-wide">{floor.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Delete floor \"${floor.name}\"? Tables on this floor will move to no floor.`)) {
+                                onDeleteFloor(floor.id);
+                              }
+                            }}
+                            className="text-gray-500 hover:text-red-600"
+                            title="Delete floor"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 font-bold">No floors yet. Add one to organize tables by floor.</p>
+                )}
+              </div>
+
               {/* Add New Table */}
               <div className="max-w-xl p-6 border-2 border-gray-200 rounded-2xl bg-white shadow-sm">
                 <h3 className="text-lg font-black text-gray-900 mb-4">Add New Table</h3>
-                <div className="flex gap-3">
-                  <input 
-                    type="text"
-                    value={newTableName}
-                    onChange={(e) => setNewTableName(e.target.value)}
-                    placeholder="Enter table name (e.g., T-7)"
-                    className="flex-1 p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none placeholder:text-gray-400"
-                  />
-                  <button 
-                    onClick={() => {
-                      if (newTableName.trim()) {
-                        onAddTable(newTableName.trim());
-                        setNewTableName('');
-                      }
-                    }}
-                    disabled={!newTableName.trim()}
-                    className="px-6 py-3 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <input 
+                      type="text"
+                      value={newTableName}
+                      onChange={(e) => setNewTableName(e.target.value)}
+                      placeholder="Enter table name (e.g., T-7)"
+                      className="flex-1 p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none placeholder:text-gray-400"
+                    />
+                    <button 
+                      onClick={() => {
+                        if (newTableName.trim()) {
+                          onAddTable(newTableName.trim(), newTableFloorId || undefined);
+                          setNewTableName('');
+                        }
+                      }}
+                      disabled={!newTableName.trim()}
+                      className="px-6 py-3 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <Plus size={20} /> Add Table
+                    </button>
+                  </div>
+
+                  <select
+                    value={newTableFloorId}
+                    onChange={(e) => setNewTableFloorId(e.target.value)}
+                    className="w-full p-3 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none bg-white"
                   >
-                    <Plus size={20} /> Add Table
-                  </button>
+                    <option value="">No Floor</option>
+                    {floors
+                      .slice()
+                      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+                      .map((floor) => (
+                        <option key={floor.id} value={floor.id}>{floor.name}</option>
+                      ))}
+                  </select>
                 </div>
               </div>
 
@@ -348,6 +385,9 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       }`}
                     >
                       <div className="text-2xl font-black text-gray-900 mb-1">{table.name}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">
+                        {floors.find(f => f.id === table.floorId)?.name || 'No floor'}
+                      </div>
                       <div className={`text-xs font-black uppercase ${
                         table.status === 'AVAILABLE' 
                           ? 'text-green-600' 
@@ -357,6 +397,19 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       }`}>
                         {table.status}
                       </div>
+                      <select
+                        value={table.floorId || ''}
+                        onChange={(e) => onUpdateTable({ ...table, floorId: e.target.value || undefined })}
+                        className="mt-3 w-full p-2 rounded-lg border border-gray-300 text-[11px] font-black text-gray-700 bg-white"
+                      >
+                        <option value="">No Floor</option>
+                        {floors
+                          .slice()
+                          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name))
+                          .map((floor) => (
+                            <option key={floor.id} value={floor.id}>{floor.name}</option>
+                          ))}
+                      </select>
                       {table.status === 'AVAILABLE' && (
                         <button 
                           onClick={() => {
@@ -404,9 +457,24 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                      <span className="p-4 font-black text-gray-900 bg-gray-50 rounded-xl border-2 border-gray-300">%</span>
                    </div>
                  </div>
+                 <div>
+                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Drinks VAT (Integrated)</label>
+                   <div className="flex gap-4">
+                     <input 
+                      type="number" 
+                      value={drinkTaxRate * 100} 
+                      onChange={(e) => setDrinkTaxRate(parseFloat(e.target.value) / 100)}
+                      className="flex-1 p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                     />
+                     <span className="p-4 font-black text-gray-900 bg-gray-50 rounded-xl border-2 border-gray-300">%</span>
+                   </div>
+                 </div>
                  <button 
                    type="button"
-                   onClick={() => setTaxRate(taxRate)}
+                   onClick={() => {
+                     setTaxRate(taxRate);
+                     setDrinkTaxRate(drinkTaxRate);
+                   }}
                    className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95"
                  >
                    <Save size={20} /> Save Settings
@@ -417,49 +485,62 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           )}
 
           {activeTab === 'RESTAURANT' && (
-            <div className="max-w-xl mx-auto w-full p-8 border-2 border-gray-200 rounded-3xl bg-white shadow-lg">
-               <h3 className="text-xl font-black text-gray-900 mb-6">Restaurant Profile</h3>
-               <form onSubmit={handleSaveRestaurantProfile} className="space-y-6">
-                 <div>
-                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Restaurant Name</label>
-                   <input 
-                    type="text" 
-                    value={localRestaurantInfo.name} 
-                    onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, name: e.target.value})}
-                    placeholder="Enter restaurant name"
-                    className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Phone Number</label>
-                   <input 
-                    type="text" 
-                    value={localRestaurantInfo.phone} 
-                    onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, phone: e.target.value})}
-                    placeholder="e.g., +91 9876543210"
-                    className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Address</label>
-                   <textarea 
-                    rows={3}
-                    value={localRestaurantInfo.address} 
-                    onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, address: e.target.value})}
-                    placeholder="Enter complete address for the bill"
-                    className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none resize-none shadow-inner placeholder:text-gray-400" 
-                   />
-                 </div>
-                 <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95">
-                   <Save size={20} /> Save Business Profile
-                 </button>
-                 <p className="text-xs text-gray-800 text-center font-black uppercase">These details appear on your printed receipts.</p>
-               </form>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-w-xl mx-auto w-full p-8 border-2 border-gray-200 rounded-3xl bg-white shadow-lg">
+                 <h3 className="text-xl font-black text-gray-900 mb-6">Restaurant Profile</h3>
+                 <form onSubmit={handleSaveRestaurantProfile} className="space-y-6">
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Restaurant Name</label>
+                     <input 
+                      type="text" 
+                      value={localRestaurantInfo.name} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, name: e.target.value})}
+                      placeholder="Enter restaurant name"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Phone Number</label>
+                     <input 
+                      type="text" 
+                      value={localRestaurantInfo.phone} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, phone: e.target.value})}
+                      placeholder="e.g., +91 9876543210"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Address</label>
+                     <textarea 
+                      rows={3}
+                      value={localRestaurantInfo.address} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, address: e.target.value})}
+                      placeholder="Enter complete address for the bill"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none resize-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">GST Number</label>
+                     <input 
+                      type="text" 
+                      value={localRestaurantInfo.gstNo || ''} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, gstNo: e.target.value})}
+                      placeholder="e.g., 27AAAAA0000A1Z5"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
+                   <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95">
+                     <Save size={20} /> Save Business Profile
+                   </button>
+                   <p className="text-xs text-gray-800 text-center font-black uppercase">These details appear on your printed receipts.</p>
+                 </form>
+              </div>
             </div>
           )}
 
           {activeTab === 'DATABASE' && (
-            <div className="max-w-2xl mx-auto space-y-6">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-w-2xl mx-auto space-y-6 pb-8">
               {/* Reset Menu Database Section */}
               <div className="p-8 border-2 border-orange-200 rounded-2xl bg-orange-50/50 shadow-sm">
                 <div className="flex items-start gap-4">
@@ -474,8 +555,8 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                     <div className="bg-white p-4 rounded-xl border mb-4">
                       <h4 className="font-bold text-gray-900 mb-2">New Menu Summary:</h4>
                       <ul className="text-sm text-gray-600 space-y-1">
-                        <li>• <strong>12 Categories:</strong> Power Up W Greens, Eggilicious, Humming Hummus, Pasta, Sandwiches, Smokin Grill, House of Keema, Wraps Rolls & Quesadilla, Meals & More, Beverages, Smoothies & Bowls, Dessert</li>
-                        <li>• <strong>93 Menu Items</strong> with veg/non-veg dual pricing support</li>
+                        <li>• <strong>26 Categories:</strong> Gavathi Lapeta, Agri Handi, Oriental Main Course, Chinese, Sindhi Specialities, Seafood, Tandoori, Biryani, and more.</li>
+                        <li>• <strong>140+ Menu Items</strong> including portions (Half/Full), multi-type (Veg/Non-Veg/Seafood), and APS support.</li>
                       </ul>
                     </div>
                     <button
@@ -488,6 +569,32 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                     >
                       <Database size={20} />
                       Reset & Sync New Menu
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Wipe Database Section */}
+              <div className="p-8 border-2 border-red-200 rounded-2xl bg-red-50 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-red-100 rounded-xl">
+                    <Trash2 size={28} className="text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-black text-gray-900 mb-2">Wipe Entire Database</h3>
+                    <p className="text-sm text-gray-600 mb-4 font-bold">
+                      CRITICAL: This will permanently delete ALL menu items, categories, orders, and table data. This is useful for starting a fresh restaurant with an empty menu.
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (confirm('DANGER: This will delete everything (Menu, Orders, Tables). This cannot be undone. Are you absolutely sure?')) {
+                          onFactoryReset?.();
+                        }
+                      }}
+                      className="px-6 py-3 bg-red-500 text-white rounded-xl font-black hover:bg-red-700 transition-all flex items-center gap-2 shadow-lg"
+                    >
+                      <Trash2 size={20} />
+                      Wipe Everything & Start Fresh
                     </button>
                   </div>
                 </div>
@@ -524,76 +631,12 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 </p>
               </div>
             </div>
+          </div>
           )}
         </div>
       </div>
 
-      {/* Addon Modal */}
-      {isAddonModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border-2 border-gray-100">
-            <div className="bg-gray-50 p-6 border-b-2 border-gray-200 flex justify-between items-center">
-              <h3 className="text-2xl font-black text-gray-900">{editingAddon ? 'Edit' : 'Add'} Addon</h3>
-              <button onClick={() => setIsAddonModalOpen(false)} className="text-gray-900 hover:text-[#F57C00] transition-colors"><X size={28} /></button>
-            </div>
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Addon Name *</label>
-                <input 
-                  type="text"
-                  value={newAddonName}
-                  onChange={(e) => setNewAddonName(e.target.value)}
-                  placeholder="e.g., Extra Cheese"
-                  className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Price (₹) *</label>
-                <input 
-                  type="number"
-                  value={newAddonPrice}
-                  onChange={(e) => setNewAddonPrice(e.target.value)}
-                  placeholder="e.g., 30"
-                  min="0"
-                  step="1"
-                  className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Apply to Category *</label>
-                <select
-                  value={newAddonCategoryId}
-                  onChange={(e) => setNewAddonCategoryId(e.target.value)}
-                  className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner bg-white"
-                >
-                  <option value="">Select Category</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-2">This addon will appear only for items in the selected category</p>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button 
-                  type="button"
-                  onClick={() => setIsAddonModalOpen(false)}
-                  className="flex-1 py-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black hover:bg-gray-100 transition-all"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleSaveAddon}
-                  disabled={!newAddonName.trim() || !newAddonPrice || !newAddonCategoryId}
-                  className="flex-1 py-4 bg-[#F57C00] text-white rounded-xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Save size={20} /> {editingAddon ? 'Update' : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Item Modal */}
       {isItemModalOpen && (
@@ -613,6 +656,8 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                   ? (vegPrice || 0) // Default to veg price
                   : parseFloat(formData.get('price') as string);
                 
+                const halfPrice = itemHasPortions ? parseFloat(formData.get('halfPrice') as string) : undefined;
+                
                 // Use the controlled state value for categoryId
                 const categoryId = itemCategoryId;
                 console.log('MenuManagement - Saving item with categoryId:', categoryId);
@@ -631,7 +676,9 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                   isVeg: itemVegType === 'VEG',
                   vegType: itemVegType,
                   vegPrice: vegPrice,
-                  nonVegPrice: nonVegPrice
+                  nonVegPrice: nonVegPrice,
+                  hasPortions: itemHasPortions,
+                  halfPrice: halfPrice
                 };
                 console.log('MenuManagement - Item data being saved:', itemData);
                 if (editingItem) {
@@ -703,6 +750,19 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 </div>
               </div>
 
+              {/* Portions Toggle */}
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer font-black text-gray-900 border-2 border-gray-200 p-4 rounded-xl hover:bg-gray-50 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={itemHasPortions}
+                    onChange={(e) => setItemHasPortions(e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-300 text-[#F57C00] focus:ring-[#F57C00]"
+                  />
+                  <span>Has Half / Full Portions?</span>
+                </label>
+              </div>
+
               {/* Price Fields - Conditional based on vegType */}
               {itemVegType === 'BOTH' ? (
                 <div className="grid grid-cols-2 gap-4">
@@ -736,17 +796,48 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       className="w-full p-4 bg-white border-2 border-red-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-red-500 outline-none shadow-inner" 
                     />
                   </div>
+                  {itemHasPortions && (
+                     <div className="col-span-2">
+                       <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider flex items-center gap-2">Half Portion Price (₹)</label>
+                       <input 
+                         name="halfPrice" 
+                         type="number" 
+                         defaultValue={editingItem?.halfPrice} 
+                         required 
+                         className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                       />
+                     </div>
+                  )}
                 </div>
               ) : (
-                <div>
-                  <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Price (₹)</label>
-                  <input 
-                    name="price" 
-                    type="number" 
-                    defaultValue={editingItem?.price} 
-                    required 
-                    className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
-                  />
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">
+                       {itemHasPortions ? 'Full Portion Price (₹)' : 'Price (₹)'}
+                    </label>
+                    <input 
+                      name="price" 
+                      type="number" 
+                      defaultValue={editingItem?.price} 
+                      required 
+                      className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                    />
+                  </div>
+                  
+                  {itemHasPortions && (
+                     <div>
+                       <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">
+                         Half Portion Price (₹)
+                       </label>
+                       <input 
+                         name="halfPrice" 
+                         type="number" 
+                         defaultValue={editingItem?.halfPrice} 
+                         required 
+                         className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
+                       />
+                     </div>
+                  )}
                 </div>
               )}
 
@@ -784,10 +875,11 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const name = formData.get('catName') as string;
+                const type = formData.get('catType') as 'FOOD' | 'DRINK';
                 if (editingCat) {
-                  onUpdateCategory({ ...editingCat, name });
+                  onUpdateCategory({ ...editingCat, name, type });
                 } else {
-                  onAddCategory(name);
+                  onAddCategory(name, type);
                 }
                 setIsCatModalOpen(false);
               }}
@@ -802,8 +894,114 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                   className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" 
                 />
               </div>
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category Type</label>
+                <select 
+                  name="catType"
+                  defaultValue={editingCat?.type || 'FOOD'}
+                  className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner appearance-none cursor-pointer"
+                >
+                  <option value="FOOD">Food</option>
+                  <option value="DRINK">Drink</option>
+                </select>
+              </div>
               <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
                 {editingCat ? 'Update Category' : 'Create Category'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DRINK CATEGORY MODAL */}
+      {isDrinkCatModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border-2 border-gray-100">
+            <div className="bg-gray-50 p-6 border-b-2 border-gray-200 flex justify-between items-center">
+              <h3 className="text-2xl font-black text-gray-900">{editingDrinkCat ? 'Edit' : 'Add'} Drink Category</h3>
+              <button onClick={() => setIsDrinkCatModalOpen(false)} className="text-gray-900 hover:text-[#F57C00] transition-colors"><X size={28} /></button>
+            </div>
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const name = formData.get('catName') as string;
+                if (editingDrinkCat) {
+                  onUpdateCategory({ ...editingDrinkCat, name, type: 'DRINK' });
+                } else {
+                  onAddCategory(name, 'DRINK');
+                }
+                setIsDrinkCatModalOpen(false);
+              }}
+              className="p-6 space-y-5"
+            >
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category Name</label>
+                <input name="catName" defaultValue={editingDrinkCat?.name} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+              <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
+                {editingDrinkCat ? 'Update Category' : 'Create Category'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DRINK ITEM MODAL */}
+      {isDrinkItemModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border-2 border-gray-100">
+            <div className="bg-gray-50 p-6 border-b-2 border-gray-200 flex justify-between items-center">
+              <h3 className="text-2xl font-black text-gray-900">{editingDrinkItem ? 'Edit' : 'Add'} Drink</h3>
+              <button onClick={() => setIsDrinkItemModalOpen(false)} className="text-gray-900 hover:text-[#F57C00] transition-colors"><X size={28} /></button>
+            </div>
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const name = formData.get('name') as string;
+                const price = parseFloat(formData.get('price') as string);
+                const quantityStr = formData.get('quantityStr') as string;
+                const categoryId = itemCategoryId;
+                
+                if (!categoryId) { alert('Please select or create a drink category first.'); return; }
+                
+                const drinkData = { 
+                  name, price, quantityStr, categoryId, isVeg: true, vegType: 'VEG' as const
+                };
+
+                if (editingDrinkItem) onUpdateMenuItem({ ...editingDrinkItem, ...drinkData });
+                else onAddMenuItem(drinkData);
+                
+                setIsDrinkItemModalOpen(false);
+              }}
+              className="p-6 space-y-5 max-h-[80vh] overflow-y-auto custom-scrollbar"
+            >
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Drink Name</label>
+                <input name="name" defaultValue={editingDrinkItem?.name} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Quantity (e.g. 300ml, 1 Pint)</label>
+                <input name="quantityStr" defaultValue={editingDrinkItem?.quantityStr} className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Price (₹)</label>
+                <input name="price" type="number" defaultValue={editingDrinkItem?.price} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category</label>
+                <select value={itemCategoryId} onChange={(e) => setItemCategoryId(e.target.value)} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner appearance-none cursor-pointer">
+                  <option value="" disabled>Select Drink Category</option>
+                  {drinkCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                </select>
+              </div>
+
+              <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
+                {editingDrinkItem ? 'Update Drink' : 'Save Drink'}
               </button>
             </form>
           </div>

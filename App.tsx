@@ -22,6 +22,7 @@ import {
   Home,
   ClipboardList,
   PieChart,
+  LayoutGrid,
   TrendingUp
 } from 'lucide-react';
 import { 
@@ -31,26 +32,29 @@ import {
   OrderStatus, 
   RestaurantInfo,
   Table,
-  Addon
+  Floor
 } from './types';
 import { 
   INITIAL_CATEGORIES, 
   INITIAL_MENU_ITEMS, 
-  TAX_RATE as INITIAL_TAX_RATE 
+  TAX_RATE as INITIAL_TAX_RATE,
+  DRINK_TAX_RATE as INITIAL_DRINK_TAX_RATE,
+  INITIAL_RESTAURANT_INFO
 } from './constants';
 import BillingScreen from './components/BillingScreen';
 import Dashboard from './components/Dashboard';
 import OrdersList from './components/OrdersList';
 import Reports from './components/Reports';
 import MenuManagement from './components/MenuManagement';
-import AuthScreen from './components/AuthScreen';
+import TablesGrid from './components/TablesGrid';
 
 // Firebase imports
 import { db, auth } from './firebase';
-import { ref, onValue, set, push, update } from 'firebase/database';
+import { ref, onValue, set, push, update, get } from 'firebase/database';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 
 type ActiveScreen = 
+  | 'TABLES'
   | 'BILLING' 
   | 'DASHBOARD' 
   | 'LIVE_ORDERS' 
@@ -89,7 +93,7 @@ const ONBOARDING_STEPS = [
 ] as const;
 
 const App: React.FC = () => {
-  const [activeScreen, setActiveScreen] = useState<ActiveScreen>('BILLING');
+  const [activeScreen, setActiveScreen] = useState<ActiveScreen>('TABLES');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   // Auth state
@@ -100,7 +104,7 @@ const App: React.FC = () => {
     const path = window.location.pathname.toLowerCase();
     return path === '/mobile' || path === '/mobile/' || path.startsWith('/mobile');
   });
-  const [mobileTab, setMobileTab] = useState<'analytics' | 'orders' | 'bills' | 'reports'>('analytics');
+  const [mobileTab, setMobileTab] = useState<'analytics' | 'orders' | 'bills' | 'reports' | 'billing' | 'tablesConfig'>('billing');
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
@@ -115,30 +119,65 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
   const [orders, setOrders] = useState<Order[]>([]);  // Orders are stored in Firebase only
+  const [billCounter, setBillCounter] = useState<number>(0);  // Sequential bill counter synced from Firebase
   const [tables, setTables] = useState<Table[]>(() => {
     const saved = localStorage.getItem('drona_tables');
     return saved ? JSON.parse(saved) : [];
   });
-  const [addons, setAddons] = useState<Addon[]>(() => {
-    const saved = localStorage.getItem('drona_addons');
+  const [floors, setFloors] = useState<Floor[]>(() => {
+    const saved = localStorage.getItem('drona_floors');
     return saved ? JSON.parse(saved) : [];
   });
+
   const [tableCarts, setTableCarts] = useState<Record<string, { items: any[]; customerName: string }>>(() => {
     const saved = localStorage.getItem('drona_table_carts');
     return saved ? JSON.parse(saved) : {};
   });
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [taxRate, setTaxRate] = useState(() => {
     const saved = localStorage.getItem('drona_tax_rate');
     return saved ? parseFloat(saved) : INITIAL_TAX_RATE;
   });
+  const [drinkTaxRate, setDrinkTaxRate] = useState(() => {
+    const saved = localStorage.getItem('drona_drink_tax_rate');
+    return saved ? parseFloat(saved) : INITIAL_DRINK_TAX_RATE;
+  });
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>(() => {
     const saved = localStorage.getItem('drona_restaurant_info');
-    return saved ? JSON.parse(saved) : {
-      name: 'DRONA POS CAFE',
-      phone: '+91 9876543210',
-      address: '123 Main Street, Food Park, City'
-    };
+    return saved ? JSON.parse(saved) : INITIAL_RESTAURANT_INFO;
   });
+
+  const buildRecordById = (items: Array<{ id: string }>) => {
+    return items.reduce<Record<string, unknown>>((acc, item) => {
+      if (item && item.id) {
+        acc[item.id] = item;
+      }
+      return acc;
+    }, {});
+  };
+
+  const normalizeTableCarts = (value: unknown): Record<string, { items: any[]; customerName: string }> => {
+    if (!value || typeof value !== 'object') return {};
+    const raw = value as Record<string, any>;
+    const normalized: Record<string, { items: any[]; customerName: string }> = {};
+
+    Object.entries(raw).forEach(([tableId, cart]) => {
+      const itemsRaw = cart?.items;
+      const items = Array.isArray(itemsRaw)
+        ? itemsRaw
+        : itemsRaw && typeof itemsRaw === 'object'
+          ? Object.values(itemsRaw)
+          : [];
+      const customerName = typeof cart?.customerName === 'string' ? cart.customerName : '';
+      normalized[tableId] = { items, customerName };
+    });
+
+    return normalized;
+  };
+
+  const sanitizeForFirebase = <T,>(value: T): T => {
+    return JSON.parse(JSON.stringify(value));
+  };
 
   // Connectivity and Route Listener
   useEffect(() => {
@@ -165,6 +204,82 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isMobileRoute) return;
+
+    const prevBodyOverscroll = document.body.style.overscrollBehaviorY;
+    const prevHtmlOverscroll = document.documentElement.style.overscrollBehaviorY;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    let touchStartY = 0;
+
+    const getScrollableAncestor = (element: Element | null): HTMLElement | null => {
+      let current = element;
+      while (current && current !== document.body) {
+        if (current instanceof HTMLElement) {
+          const style = window.getComputedStyle(current);
+          const canScrollY =
+            (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+            current.scrollHeight > current.clientHeight;
+          if (canScrollY) {
+            return current;
+          }
+        }
+        current = current.parentElement;
+      }
+      return null;
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        touchStartY = event.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+
+      const currentY = event.touches[0].clientY;
+      const pullingDown = currentY > touchStartY;
+      const pushingUp = currentY < touchStartY;
+      const target = event.target as Element | null;
+      const scroller = getScrollableAncestor(target);
+
+      if (!scroller) {
+        // No scroll container under finger, block viewport pull-to-refresh.
+        if (pullingDown) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      const atTop = scroller.scrollTop <= 0;
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+
+      // Stop scroll chaining to viewport edges that triggers browser refresh/bounce.
+      if ((pullingDown && atTop) || (pushingUp && atBottom)) {
+        event.preventDefault();
+      }
+    };
+
+    // Prevent browser pull-to-refresh from hijacking in-app vertical scroll.
+    document.body.style.overscrollBehaviorY = 'none';
+    document.documentElement.style.overscrollBehaviorY = 'none';
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      document.body.style.overscrollBehaviorY = prevBodyOverscroll;
+      document.documentElement.style.overscrollBehaviorY = prevHtmlOverscroll;
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [isMobileRoute]);
+
   // Firebase Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -181,7 +296,8 @@ const App: React.FC = () => {
       localStorage.removeItem('drona_categories');
       localStorage.removeItem('drona_menu_items');
       localStorage.removeItem('drona_tables');
-      localStorage.removeItem('drona_addons');
+      localStorage.removeItem('drona_floors');
+
       localStorage.removeItem('drona_table_carts');
       localStorage.removeItem('drona_tax_rate');
       localStorage.removeItem('drona_restaurant_info');
@@ -190,11 +306,10 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper to get user-scoped Firebase path
-  const userPath = (path: string) => `users/${user?.uid}/${path}`;
+  // Helper to get shared Firebase path (auth removed)
+  const userPath = (path: string) => `users/public/${path}`;
 
   const markOnboardingDone = async () => {
-    if (!user) return;
     try {
       await set(ref(db, userPath('meta/onboardingCompleted')), true);
     } catch (error) {
@@ -226,7 +341,6 @@ const App: React.FC = () => {
 
   // Initialize user settings if empty (do not auto-seed menu/category sample data)
   useEffect(() => {
-    if (!user) return;
     const initializeDatabase = async () => {
       try {
         const settingsRef = ref(db, userPath('settings'));
@@ -234,12 +348,14 @@ const App: React.FC = () => {
           if (!snapshot.exists()) {
             const savedTax = localStorage.getItem('drona_tax_rate');
             const taxRateVal = savedTax ? parseFloat(savedTax) : INITIAL_TAX_RATE;
+            const savedDrinkTax = localStorage.getItem('drona_drink_tax_rate');
+            const drinkTaxRateVal = savedDrinkTax ? parseFloat(savedDrinkTax) : 0;
             const restaurantVal = { 
-              name: user.displayName || 'DRONA POS CAFE', 
+              name: user?.displayName || 'NOON TO MOON CAFE', 
               phone: '+91 9876543210', 
               address: '123 Main Street, Food Park, City' 
             };
-            await set(settingsRef, { taxRate: taxRateVal, restaurantInfo: restaurantVal });
+            await set(settingsRef, { taxRate: taxRateVal, drinkTaxRate: drinkTaxRateVal, restaurantInfo: restaurantVal });
             console.log('Settings (taxes, restaurant) synced to Firebase');
           }
         }, { onlyOnce: true });
@@ -257,14 +373,10 @@ const App: React.FC = () => {
     };
 
     initializeDatabase();
-  }, [user]);
+  }, []);
 
   // Firebase Real-time Listeners
   useEffect(() => {
-    if (!user) {
-      setIsDataLoaded(false);
-      return;
-    }
 
     // Categories Sync
     const categoriesRef = ref(db, userPath('categories'));
@@ -275,6 +387,15 @@ const App: React.FC = () => {
         setCategories(catArray);
         localStorage.setItem('drona_categories', JSON.stringify(catArray));
       } else {
+        const saved = localStorage.getItem('drona_categories');
+        if (saved) {
+          const catArray = JSON.parse(saved) as Category[];
+          if (catArray.length > 0) {
+            set(ref(db, userPath('categories')), buildRecordById(catArray));
+            setCategories(catArray);
+            return;
+          }
+        }
         setCategories([]);
         localStorage.setItem('drona_categories', JSON.stringify([]));
       }
@@ -291,6 +412,15 @@ const App: React.FC = () => {
         setMenuItems(itemArray);
         localStorage.setItem('drona_menu_items', JSON.stringify(itemArray));
       } else {
+        const saved = localStorage.getItem('drona_menu_items');
+        if (saved) {
+          const itemArray = JSON.parse(saved) as MenuItem[];
+          if (itemArray.length > 0) {
+            set(ref(db, userPath('menu_items')), buildRecordById(itemArray));
+            setMenuItems(itemArray);
+            return;
+          }
+        }
         setMenuItems([]);
         localStorage.setItem('drona_menu_items', JSON.stringify([]));
       }
@@ -311,6 +441,17 @@ const App: React.FC = () => {
       setIsDataLoaded(true);
     });
 
+    // Bill Counter Sync
+    const billCounterRef = ref(db, userPath('bill_counter'));
+    const unsubscribeBillCounter = onValue(billCounterRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null && data !== undefined) {
+        setBillCounter(Number(data));
+      } else {
+        setBillCounter(0);
+      }
+    });
+
     // Settings Sync
     const settingsRef = ref(db, userPath('settings'));
     const unsubscribeSettings = onValue(settingsRef, (snapshot) => {
@@ -324,6 +465,10 @@ const App: React.FC = () => {
           setTaxRate(data.taxRate);
           localStorage.setItem('drona_tax_rate', data.taxRate.toString());
         }
+        if (data.drinkTaxRate !== undefined) {
+          setDrinkTaxRate(data.drinkTaxRate);
+          localStorage.setItem('drona_drink_tax_rate', data.drinkTaxRate.toString());
+        }
       }
     });
 
@@ -336,22 +481,41 @@ const App: React.FC = () => {
         setTables(tableArray);
         localStorage.setItem('drona_tables', JSON.stringify(tableArray));
       } else {
+        const saved = localStorage.getItem('drona_tables');
+        if (saved) {
+          const tableArray = JSON.parse(saved) as Table[];
+          if (tableArray.length > 0) {
+            set(ref(db, userPath('tables')), buildRecordById(tableArray));
+            setTables(tableArray);
+            return;
+          }
+        }
         setTables([]);
         localStorage.setItem('drona_tables', JSON.stringify([]));
       }
     });
 
-    // Addons Sync
-    const addonsRef = ref(db, userPath('addons'));
-    const unsubscribeAddons = onValue(addonsRef, (snapshot) => {
+
+
+    const floorsRef = ref(db, userPath('floors'));
+    const unsubscribeFloors = onValue(floorsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const addonArray = Object.values(data) as Addon[];
-        setAddons(addonArray);
-        localStorage.setItem('drona_addons', JSON.stringify(addonArray));
+        const floorArray = Object.values(data) as Floor[];
+        setFloors(floorArray);
+        localStorage.setItem('drona_floors', JSON.stringify(floorArray));
       } else {
-        setAddons([]);
-        localStorage.setItem('drona_addons', JSON.stringify([]));
+        const saved = localStorage.getItem('drona_floors');
+        if (saved) {
+          const floorArray = JSON.parse(saved) as Floor[];
+          if (floorArray.length > 0) {
+            set(ref(db, userPath('floors')), buildRecordById(floorArray));
+            setFloors(floorArray);
+            return;
+          }
+        }
+        setFloors([]);
+        localStorage.setItem('drona_floors', JSON.stringify([]));
       }
     });
 
@@ -360,9 +524,26 @@ const App: React.FC = () => {
     const unsubscribeTableCarts = onValue(tableCartsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        setTableCarts(data);
-        localStorage.setItem('drona_table_carts', JSON.stringify(data));
+        const normalized = normalizeTableCarts(data);
+        setTableCarts(normalized);
+        localStorage.setItem('drona_table_carts', JSON.stringify(normalized));
+
+        // Auto-repair malformed cart shapes in RTDB to keep all clients in sync.
+        if (JSON.stringify(data) !== JSON.stringify(normalized)) {
+          set(ref(db, userPath('table_carts')), sanitizeForFirebase(normalized)).catch((error) => {
+            console.error('Firebase Sync Error (Repair Table Carts):', error);
+          });
+        }
       } else {
+        const saved = localStorage.getItem('drona_table_carts');
+        if (saved) {
+          const carts = normalizeTableCarts(JSON.parse(saved));
+          if (Object.keys(carts).length > 0) {
+            set(ref(db, userPath('table_carts')), carts);
+            setTableCarts(carts);
+            return;
+          }
+        }
         setTableCarts({});
         localStorage.setItem('drona_table_carts', JSON.stringify({}));
       }
@@ -374,22 +555,40 @@ const App: React.FC = () => {
       unsubscribeOrders();
       unsubscribeSettings();
       unsubscribeTables();
-      unsubscribeAddons();
+
+      unsubscribeFloors();
       unsubscribeTableCarts();
+      unsubscribeBillCounter();
     };
-  }, [user]);
+  }, []);
 
   // Action Handlers - Firebase is the single source of truth for orders
   const handleCreateOrder = async (order: Order) => {
     console.log("Creating order:", order);
     
+    // Get current counter from Firebase to ensure consistency
+    let currentCounter = billCounter;
+    try {
+      const counterSnap = await get(ref(db, userPath('bill_counter')));
+      if (counterSnap.exists()) {
+        currentCounter = Number(counterSnap.val());
+      }
+    } catch {
+      // Fallback to local state
+    }
+    
+    const newCounter = currentCounter + 1;
+    order.billNo = `INV-${newCounter}`;
+    
     // Clean the order object - remove undefined values (Firebase doesn't accept undefined)
     const cleanOrder = JSON.parse(JSON.stringify(order));
     
     try {
-      // Save directly to Firebase - the onValue listener will update local state
+      // Save order and update counter atomically
       await set(ref(db, userPath(`orders/${order.id}`)), cleanOrder);
-      console.log("Order saved to Firebase successfully:", order.id);
+      await set(ref(db, userPath('bill_counter')), newCounter);
+      setBillCounter(newCounter);
+      console.log("Order saved to Firebase successfully:", order.id, "Bill:", order.billNo);
     } catch (error) {
       console.error("Firebase Error (Create Order):", error);
       alert("Failed to save order. Please check your internet connection.");
@@ -415,18 +614,77 @@ const App: React.FC = () => {
   };
 
   // Table Handlers
-  const handleAddTable = async (tableName: string) => {
+  const handleAddTable = async (tableName: string, floorId?: string) => {
     const newId = Math.random().toString(36).substr(2, 9);
-    const newTable: Table = { id: newId, name: tableName, status: 'AVAILABLE' };
-    
+    const newTable: Table = {
+      id: newId,
+      name: tableName,
+      status: 'AVAILABLE',
+      ...(floorId ? { floorId } : {}),
+    };
+
     const updatedTables = [...tables, newTable];
     setTables(updatedTables);
     localStorage.setItem('drona_tables', JSON.stringify(updatedTables));
 
     try {
-      await set(ref(db, userPath(`tables/${newId}`)), newTable);
+      await set(ref(db, userPath(`tables/${newId}`)), JSON.parse(JSON.stringify(newTable)));
     } catch (error) {
       console.error("Firebase Sync Error (Add Table):", error);
+    }
+  };
+
+  const handleUpdateTable = async (updated: Table) => {
+    const updatedTables = tables.map(t => (t.id === updated.id ? updated : t));
+    setTables(updatedTables);
+    localStorage.setItem('drona_tables', JSON.stringify(updatedTables));
+    const clean: Record<string, unknown> = {
+      id: updated.id,
+      name: updated.name,
+      status: updated.status,
+    };
+    if (updated.capacity !== undefined) clean.capacity = updated.capacity;
+    if (updated.currentOrderId !== undefined) clean.currentOrderId = updated.currentOrderId;
+    if (updated.floorId) clean.floorId = updated.floorId;
+    else clean.floorId = null;
+    try {
+      await update(ref(db, userPath(`tables/${updated.id}`)), clean);
+    } catch (error) {
+      console.error("Firebase Sync Error (Update Table):", error);
+    }
+  };
+
+  const handleAddFloor = async (name: string) => {
+    const newId = Math.random().toString(36).substr(2, 9);
+    const floor: Floor = { id: newId, name: name.trim(), sortOrder: floors.length };
+    const next = [...floors, floor];
+    setFloors(next);
+    localStorage.setItem('drona_floors', JSON.stringify(next));
+    try {
+      await set(ref(db, userPath(`floors/${newId}`)), floor);
+    } catch (error) {
+      console.error("Firebase Sync Error (Add Floor):", error);
+    }
+  };
+
+  const handleDeleteFloor = async (floorId: string) => {
+    const next = floors.filter(f => f.id !== floorId);
+    setFloors(next);
+    localStorage.setItem('drona_floors', JSON.stringify(next));
+    const clearedTables = tables.map(t =>
+      t.floorId === floorId ? { ...t, floorId: undefined } : t
+    );
+    setTables(clearedTables);
+    localStorage.setItem('drona_tables', JSON.stringify(clearedTables));
+    try {
+      await set(ref(db, userPath(`floors/${floorId}`)), null);
+      for (const t of tables) {
+        if (t.floorId === floorId) {
+          await update(ref(db, userPath(`tables/${t.id}`)), { floorId: null });
+        }
+      }
+    } catch (error) {
+      console.error("Firebase Sync Error (Delete Floor):", error);
     }
   };
 
@@ -516,9 +774,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddCategory = async (name: string) => {
+  const handleAddCategory = async (name: string, type?: 'FOOD' | 'DRINK') => {
     const newId = Math.random().toString(36).substr(2, 9);
-    const newCat = { id: newId, name };
+    const newCat = { id: newId, name, type: type || 'FOOD' };
     try {
       await set(ref(db, userPath(`categories/${newId}`)), newCat);
     } catch (error) {
@@ -542,40 +800,13 @@ const App: React.FC = () => {
       for (const item of itemsToDelete) {
         await set(ref(db, userPath(`menu_items/${item.id}`)), null);
       }
-      // Also delete addons linked to this category
-      const addonsToDelete = addons.filter(a => a.categoryId === id);
-      for (const addon of addonsToDelete) {
-        await set(ref(db, userPath(`addons/${addon.id}`)), null);
-      }
+
     } catch (error) {
       console.error("Firebase Sync Error (Delete Category):", error);
     }
   };
 
-  // Addon Handlers
-  const handleAddAddon = async (addon: Addon) => {
-    try {
-      await set(ref(db, userPath(`addons/${addon.id}`)), addon);
-    } catch (error) {
-      console.error("Firebase Sync Error (Add Addon):", error);
-    }
-  };
 
-  const handleUpdateAddon = async (addon: Addon) => {
-    try {
-      await set(ref(db, userPath(`addons/${addon.id}`)), addon);
-    } catch (error) {
-      console.error("Firebase Sync Error (Update Addon):", error);
-    }
-  };
-
-  const handleDeleteAddon = async (id: string) => {
-    try {
-      await set(ref(db, userPath(`addons/${id}`)), null);
-    } catch (error) {
-      console.error("Firebase Sync Error (Delete Addon):", error);
-    }
-  };
 
   const handleSaveTaxRate = async (newRate: number) => {
     setTaxRate(newRate);
@@ -584,6 +815,16 @@ const App: React.FC = () => {
       await update(ref(db, userPath('settings')), { taxRate: newRate });
     } catch (error) {
       console.error("Firebase Sync Error (Tax):", error);
+    }
+  };
+
+  const handleSaveDrinkTaxRate = async (newRate: number) => {
+    setDrinkTaxRate(newRate);
+    localStorage.setItem('drona_drink_tax_rate', newRate.toString());
+    try {
+      await update(ref(db, userPath('settings')), { drinkTaxRate: newRate });
+    } catch (error) {
+      console.error("Firebase Sync Error (Drink Tax):", error);
     }
   };
 
@@ -597,10 +838,13 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTableCarts = async (newTableCarts: Record<string, { items: any[]; customerName: string }>) => {
-    setTableCarts(newTableCarts);
-    localStorage.setItem('drona_table_carts', JSON.stringify(newTableCarts));
+    const normalized = normalizeTableCarts(newTableCarts);
+    const cleanTableCarts = sanitizeForFirebase(normalized);
+
+    setTableCarts(cleanTableCarts);
+    localStorage.setItem('drona_table_carts', JSON.stringify(cleanTableCarts));
     try {
-      await set(ref(db, userPath('table_carts')), newTableCarts);
+      await set(ref(db, userPath('table_carts')), cleanTableCarts);
     } catch (error) {
       console.error("Firebase Sync Error (Table Carts):", error);
     }
@@ -636,21 +880,214 @@ const App: React.FC = () => {
     }
   };
 
+  // Factory Reset: Wipes menu items, orders, table carts, and resets bill counter
+  const handleFactoryReset = async () => {
+    try {
+      // Clear menu items and categories
+      await set(ref(db, userPath('menu_items')), null);
+      await set(ref(db, userPath('categories')), null);
+      
+      // Clear orders
+      await set(ref(db, userPath('orders')), null);
+      
+      // Clear table carts (pending orders on tables)
+      await set(ref(db, userPath('table_carts')), null);
+      
+      // Clear bill counter so next bill is INV-1
+      await set(ref(db, userPath('bill_counter')), 0);
+      setBillCounter(0);
+
+      // Update local state
+      setMenuItems([]);
+      setCategories([]);
+
+      setOrders([]);
+      setTableCarts({});
+      localStorage.setItem('drona_menu_items', JSON.stringify([]));
+      localStorage.setItem('drona_categories', JSON.stringify([]));
+
+      localStorage.setItem('drona_table_carts', JSON.stringify({}));
+      
+      // Reset tables currentOrderId and status if they are occupied
+      const resetTables = tables.map(t => ({ ...t, status: 'AVAILABLE' as const, currentOrderId: undefined }));
+      setTables(resetTables);
+      localStorage.setItem('drona_tables', JSON.stringify(resetTables));
+      for (const t of resetTables) {
+        await update(ref(db, userPath(`tables/${t.id}`)), { status: 'AVAILABLE', currentOrderId: null });
+      }
+
+      alert('Database wiped successfully! Menu items, orders, and table carts have been cleared. Order IDs will now start from INV-1.');
+    } catch (error) {
+      console.error('Error wiping database:', error);
+      alert('Failed to wipe database. Check console for details.');
+    }
+  };
+
+  // Print bill for a table from the tables screen
+  const handlePrintTableBill = (tableId: string) => {
+    const cart = tableCarts[tableId];
+    if (!cart || !cart.items || cart.items.length === 0) {
+      alert('No items on this table to print.');
+      return;
+    }
+    const items = cart.items;
+    const subtotal = items.reduce((sum, it) => sum + (it.price || 0) * (it.quantity || 0), 0);
+    const taxAmount = subtotal * taxRate;
+    const total = subtotal + taxAmount;
+    const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
+    const customerName = cart.customerName || 'Guest';
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <html>
+        <head>
+          <style>
+            @page { size: 3in 10in; margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 3in; 
+              margin: 0; 
+              padding: 10px; 
+              font-size: 11px; 
+              color: #000; 
+              line-height: 1.2;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 1px dashed #000; margin: 8px 0; }
+            .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+            .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
+            .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; }
+            .qty { width: 25px; text-align: center; }
+            .price { width: 45px; text-align: right; }
+            .total-section { font-size: 12px; margin-top: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="center header-name">${restaurantInfo.name}</div>
+          <div class="center">${restaurantInfo.address}</div>
+          <div class="center">Tel: ${restaurantInfo.phone}</div>
+          ${restaurantInfo.gstNo ? `<div class="center" style="font-size:10px;">GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
+          <div class="line"></div>
+          <div class="center bold">${tableName} - RUNNING BILL</div>
+          <div>Cust: ${customerName}</div>
+          <div>Date: ${new Date().toLocaleDateString()}</div>
+          <div>Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          <div class="line"></div>
+          <div class="bold item-row">
+            <span class="item-name">Item</span>
+            <span class="qty">Qty</span>
+            <span class="price">Amt</span>
+          </div>
+          ${items.map(it => `
+            <div class="item-row">
+              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
+              <span class="qty">${it.quantity}</span>
+              <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
+            </div>
+          `).join('')}
+          <div class="line"></div>
+          <div class="item-row"><span>Subtotal:</span><span>₹${subtotal.toFixed(0)}</span></div>
+          <div class="item-row"><span>Tax (${(taxRate * 100).toFixed(0)}%):</span><span>₹${taxAmount.toFixed(0)}</span></div>
+          <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${total.toFixed(0)}</span></div>
+          <div class="line"></div>
+          <div class="center" style="margin-top:8px; font-size:10px;">** Running Bill - Not Final **</div>
+          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const renderScreen = () => {
     switch (activeScreen) {
+      case 'TABLES':
+        return (
+          <TablesGrid
+            tables={tables}
+            floors={floors}
+            tableCarts={tableCarts}
+            selectedTableId={selectedTableId}
+            onSelectTable={(tableId) => {
+              setSelectedTableId(tableId);
+              setActiveScreen('BILLING');
+            }}
+            onPrintTable={handlePrintTableBill}
+            onCheckoutTable={(tableId) => {
+              const cart = tableCarts[tableId];
+              if (!cart || !cart.items || cart.items.length === 0) {
+                alert('No items on this table to checkout.');
+                return;
+              }
+              const items = cart.items;
+              const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
+              const customerName = cart.customerName || 'Guest';
+
+              // Compute subtotals (food vs drink for GST/VAT split)
+              const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+              const isDrinkCat = (catId: string) => {
+                const cat = categories.find(c => c.id === catId);
+                return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
+              };
+              const foodSub = items.reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
+              const drinkSub = items.reduce((s, i) => s + (isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
+              const subtotal = foodSub + drinkSub;
+              const tax = (foodSub * taxRate) + (drinkSub * drinkTaxRate);
+              const total = subtotal + tax;
+
+              const d = new Date();
+              const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+              const newOrder: Order = {
+                id: Math.random().toString(36).substr(2, 9),
+                billNo: `INV-${Date.now().toString().substr(-6)}`,
+                customerName,
+                tableId,
+                tableName,
+                date: dateStr,
+                time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                items: [...items],
+                subtotal,
+                tax,
+                total,
+                paymentMode: 'CASH',
+                orderType: 'DINE_IN',
+                staffName: 'Admin',
+                status: 'COMPLETED'
+              };
+
+              handleCreateOrder(newOrder);
+              // Clear table cart and reset status
+              const newCarts = { ...tableCarts };
+              newCarts[tableId] = { items: [], customerName: '' };
+              handleUpdateTableCarts(newCarts);
+              handleUpdateTableStatus(tableId, 'AVAILABLE');
+            }}
+          />
+        );
       case 'BILLING':
         return (
           <BillingScreen 
             categories={categories} 
             menuItems={menuItems} 
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             restaurantInfo={restaurantInfo}
             tables={tables}
+            floors={floors}
             tableCarts={tableCarts}
-            addons={addons}
+
             onCreateOrder={handleCreateOrder}
             onUpdateTableStatus={handleUpdateTableStatus}
             onUpdateTableCarts={handleUpdateTableCarts}
+            variant="desktop"
+            selectedTableId={selectedTableId}
+            onBackToTables={() => {
+              setSelectedTableId(null);
+              setActiveScreen('TABLES');
+            }}
           />
         );
       case 'DASHBOARD':
@@ -663,7 +1100,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'ALL_ORDERS':
@@ -674,7 +1112,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'COMPLETED_ORDERS':
@@ -685,7 +1124,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'CANCELLED_ORDERS':
@@ -696,7 +1136,8 @@ const App: React.FC = () => {
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+            categories={categories}
           />
         );
       case 'REPORTS':
@@ -706,11 +1147,12 @@ const App: React.FC = () => {
           <MenuManagement 
             categories={categories} 
             menuItems={menuItems}
-            taxRate={taxRate}
+            taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             restaurantInfo={restaurantInfo}
             tables={tables}
-            addons={addons}
-            setTaxRate={handleSaveTaxRate}
+            floors={floors}
+
+            setTaxRate={handleSaveTaxRate} setDrinkTaxRate={handleSaveDrinkTaxRate}
             setRestaurantInfo={handleSaveRestaurantInfo}
             onAddMenuItem={handleAddMenuItem}
             onUpdateMenuItem={handleUpdateMenuItem}
@@ -719,15 +1161,17 @@ const App: React.FC = () => {
             onUpdateCategory={handleUpdateCategory}
             onDeleteCategory={handleDeleteCategory}
             onAddTable={handleAddTable}
+            onUpdateTable={handleUpdateTable}
             onDeleteTable={handleDeleteTable}
-            onAddAddon={handleAddAddon}
-            onUpdateAddon={handleUpdateAddon}
-            onDeleteAddon={handleDeleteAddon}
+            onAddFloor={handleAddFloor}
+            onDeleteFloor={handleDeleteFloor}
+
             onResetMenuDatabase={handleResetMenuDatabase}
+            onFactoryReset={handleFactoryReset}
           />
         );
       default:
-        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} restaurantInfo={restaurantInfo} tables={tables} tableCarts={tableCarts} addons={addons} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
+        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
     }
   };
 
@@ -744,36 +1188,22 @@ const App: React.FC = () => {
       );
     }
 
-    switch (mobileTab) {
-      case 'analytics':
-        return <Dashboard orders={orders} />;
-      case 'orders':
-        return (
-          <OrdersList
-            title="Live Orders"
-            orders={orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')}
-            onUpdateStatus={handleUpdateOrderStatus}
-            onDeleteOrder={handleDeleteOrder}
-            restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
-          />
-        );
-      case 'bills':
-        return (
-          <OrdersList
-            title="All Bills"
-            orders={orders}
-            onUpdateStatus={handleUpdateOrderStatus}
-            onDeleteOrder={handleDeleteOrder}
-            restaurantInfo={restaurantInfo}
-            taxRate={taxRate}
-          />
-        );
-      case 'reports':
-        return <Reports orders={orders} />;
-      default:
-        return <Dashboard orders={orders} />;
-    }
+    return (
+      <BillingScreen 
+        categories={categories} 
+        menuItems={menuItems} 
+        taxRate={taxRate} drinkTaxRate={drinkTaxRate}
+        restaurantInfo={restaurantInfo}
+        tables={tables}
+        floors={floors}
+        tableCarts={tableCarts}
+
+        onCreateOrder={handleCreateOrder}
+        onUpdateTableStatus={handleUpdateTableStatus}
+        onUpdateTableCarts={handleUpdateTableCarts}
+        variant="mobile"
+      />
+    );
   };
 
   // Auth loading state
@@ -788,15 +1218,10 @@ const App: React.FC = () => {
     );
   }
 
-  // Show auth screen if not logged in
-  if (!user) {
-    return <AuthScreen />;
-  }
-
   // Mobile Layout - triggered by /mobile URL path
   if (isMobileRoute) {
     return (
-      <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
+      <div className="flex flex-col bg-gray-100 overflow-hidden min-h-0" style={{ height: '100dvh' }}>
         {/* Mobile Header */}
         <header className="bg-white h-14 border-b flex items-center justify-between px-4 shrink-0 shadow-sm z-30">
           <div className="flex items-center gap-3">
@@ -819,40 +1244,10 @@ const App: React.FC = () => {
         </header>
 
         {/* Mobile Content */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden min-h-0">
           {renderMobileScreen()}
         </main>
 
-        {/* Bottom Navigation */}
-        <nav className="bg-white border-t shadow-lg shrink-0 safe-area-bottom">
-          <div className="flex justify-around items-center h-16">
-            <MobileNavItem
-              icon={<TrendingUp size={22} />}
-              label="Analytics"
-              active={mobileTab === 'analytics'}
-              onClick={() => setMobileTab('analytics')}
-            />
-            <MobileNavItem
-              icon={<Clock size={22} />}
-              label="Orders"
-              active={mobileTab === 'orders'}
-              onClick={() => setMobileTab('orders')}
-              badge={orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length}
-            />
-            <MobileNavItem
-              icon={<Receipt size={22} />}
-              label="Bills"
-              active={mobileTab === 'bills'}
-              onClick={() => setMobileTab('bills')}
-            />
-            <MobileNavItem
-              icon={<PieChart size={22} />}
-              label="Reports"
-              active={mobileTab === 'reports'}
-              onClick={() => setMobileTab('reports')}
-            />
-          </div>
-        </nav>
       </div>
     );
   }
@@ -913,9 +1308,9 @@ const App: React.FC = () => {
         <nav className="mt-4 flex-1 overflow-y-auto custom-scrollbar">
           <SidebarItem 
             icon={<Receipt size={20} />} 
-            label="Billing" 
-            active={activeScreen === 'BILLING'} 
-            onClick={() => { setActiveScreen('BILLING'); setIsSidebarOpen(false); }} 
+            label="Tables"
+            active={activeScreen === 'TABLES'}
+            onClick={() => { setActiveScreen('TABLES'); setIsSidebarOpen(false); }} 
           />
           <SidebarItem 
             icon={<BarChart3 size={20} />} 
@@ -980,18 +1375,18 @@ const App: React.FC = () => {
               <MenuIcon size={24} className="text-gray-600" />
             </button>
             <div className="hidden md:flex items-center gap-2">
-               <span className="text-[#F57C00] font-bold text-lg">DRONA</span>
+               <span className="text-[#F57C00] font-bold text-lg">NOON TO MOON</span>
                <div className="h-6 w-px bg-gray-200 mx-2"></div>
                <button
-                 onClick={() => setActiveScreen('BILLING')}
+                 onClick={() => setActiveScreen('TABLES')}
                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-sm transition-all ${
-                   activeScreen === 'BILLING' 
+                   activeScreen === 'TABLES' 
                      ? 'bg-[#F57C00] text-white shadow-lg shadow-orange-200' 
                      : 'bg-gray-100 text-gray-700 hover:bg-orange-50 hover:text-[#F57C00]'
                  }`}
                >
                  <Receipt size={16} />
-                 <span>Billing</span>
+                 <span>Tables</span>
                </button>
                <div className="h-6 w-px bg-gray-200 mx-1"></div>
                <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-full border">

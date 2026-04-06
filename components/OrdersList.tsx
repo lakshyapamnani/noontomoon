@@ -17,20 +17,18 @@ import {
   Filter,
   X,
   MapPin,
+  Calendar,
   Phone,
   CreditCard,
   Banknote,
   Smartphone,
-  Trash2
+  Trash2,
+  Download
 } from 'lucide-react';
-import { Order, OrderStatus, RestaurantInfo, CartItem } from '../types';
+import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
 
 const formatItemDisplay = (it: CartItem) => {
-  const base = `${it.name} x ${it.quantity}`;
-  const addons = it.selectedAddons?.length
-    ? ` (+ ${it.selectedAddons.map(a => a.name).join(', ')})`
-    : '';
-  return base + addons;
+  return `${it.name} x ${it.quantity}`;
 };
 
 interface OrdersListProps {
@@ -40,12 +38,18 @@ interface OrdersListProps {
   onDeleteOrder: (id: string) => void;
   restaurantInfo: RestaurantInfo;
   taxRate: number;
+  drinkTaxRate?: number;
+  categories?: Category[];
 }
 
-const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate }) => {
+const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [] }) => {
   const isAllBillsView = title === "All Bills";
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ALL'>('TODAY');
+  const [kotCategoryId, setKotCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentMode | 'ALL'>('ALL');
+  const [monthFilter, setMonthFilter] = useState<string>('ALL');
+  const [showCsvMenu, setShowCsvMenu] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   
   // Ensure orders is always an array
@@ -71,18 +75,38 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
     };
   }, [safeOrders]);
 
+  // Derive available months from orders for the month dropdown
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    safeOrders.forEach(o => {
+      if (o.date && /^\d{4}-\d{2}/.test(o.date)) {
+        monthSet.add(o.date.substring(0, 7)); // 'YYYY-MM'
+      }
+    });
+    return Array.from(monthSet).sort().reverse();
+  }, [safeOrders]);
+
   const displayedOrders = useMemo(() => {
-    const list = isAllBillsView 
+    let list = isAllBillsView 
       ? (activeTab === 'TODAY' ? todayOrders : allOrders) 
       : safeOrders;
+
+    // Month filter
+    if (monthFilter !== 'ALL') {
+      list = list.filter(o => o.date && o.date.startsWith(monthFilter));
+    }
+      
+    const paymentFiltered = paymentFilter !== 'ALL'
+      ? list.filter(o => o.paymentMode === paymentFilter)
+      : list;
     
-    if (!searchQuery.trim()) return list;
+    if (!searchQuery.trim()) return paymentFiltered;
     
-    return list.filter(o => 
+    return paymentFiltered.filter(o => 
       o.billNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
       o.customerName?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery]);
+  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery, paymentFilter, monthFilter]);
 
   // Calculate total sale for displayed orders
   const totalSale = useMemo(() => {
@@ -101,10 +125,10 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       <html>
         <head>
           <style>
-            @page { size: 2in 10in; margin: 0; }
+            @page { size: 3in 10in; margin: 0; }
             body { 
               font-family: 'Courier New', Courier, monospace; 
-              width: 2in; 
+              width: 3in; 
               margin: 0; 
               padding: 10px; 
               font-size: 11px; 
@@ -143,7 +167,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           </div>
           ${order.items.map(it => `
             <div class="item-row">
-              <span class="item-name">${it.name}${it.selectedAddons?.length ? ' + ' + it.selectedAddons.map(a => a.name).join(', ') : ''}</span>
+              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
               <span class="qty">${it.quantity}</span>
               <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
@@ -193,7 +217,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           </style>
         </head>
         <body>
-          <h1>DRONA POS</h1>
+          <h1>NOON TO MOON POS</h1>
           <h2>${title} (${subTitle})</h2>
           <p>Generated: ${new Date().toLocaleString()}</p>
           <div class="summary">
@@ -218,6 +242,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                 <th>Time</th>
                 <th>Items</th>
                 <th>Type</th>
+                <th>Payment</th>
                 <th>Total</th>
                 <th>Status</th>
               </tr>
@@ -244,6 +269,149 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
     printWindow.document.close();
   };
 
+  const exportKOTSummary = (data: Order[], subTitle: string, categoryFilter: 'all' | string) => {
+    if (!data || data.length === 0) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const categoryMap: Record<string, { name: string; items: Record<string, { name: string; qty: number; total: number }> }> = {};
+
+    const categoryNameById: Record<string, string> = {};
+    categories.forEach(cat => {
+      categoryNameById[cat.id] = cat.name;
+    });
+
+    data.forEach(order => {
+      (order.items || []).forEach(it => {
+        const catId = it.categoryId || 'uncategorized';
+        if (categoryFilter !== 'all' && catId !== categoryFilter) return;
+
+        const catName = categoryNameById[catId] || (catId === 'uncategorized' ? 'Other' : 'Other');
+        if (!categoryMap[catId]) {
+          categoryMap[catId] = { name: catName, items: {} };
+        }
+        const key = it.name;
+        if (!categoryMap[catId].items[key]) {
+          categoryMap[catId].items[key] = { name: it.name, qty: 0, total: 0 };
+        }
+        categoryMap[catId].items[key].qty += it.quantity;
+        categoryMap[catId].items[key].total += it.price * it.quantity;
+      });
+    });
+
+    const filterLabel =
+      categoryFilter === 'all'
+        ? 'ALL CATEGORIES'
+        : (categoryNameById[categoryFilter] || 'CATEGORY').toUpperCase();
+
+    const orderedSections: { id: string; data: { name: string; items: Record<string, { name: string; qty: number; total: number }> } }[] = [];
+    const seen = new Set<string>();
+    if (categoryFilter === 'all') {
+      for (const cat of categories) {
+        if (categoryMap[cat.id]) {
+          orderedSections.push({ id: cat.id, data: categoryMap[cat.id] });
+          seen.add(cat.id);
+        }
+      }
+      for (const id of Object.keys(categoryMap)) {
+        if (!seen.has(id)) orderedSections.push({ id, data: categoryMap[id] });
+      }
+    } else if (categoryMap[categoryFilter]) {
+      orderedSections.push({ id: categoryFilter, data: categoryMap[categoryFilter] });
+    }
+
+    const sectionHtml = orderedSections
+      .map(({ data: cat }) => {
+        const rows = Object.values(cat.items).sort((a, b) => a.name.localeCompare(b.name));
+        if (!rows.length) return '';
+        const catTotal = rows.reduce((sum, r) => sum + r.total, 0);
+        return `
+          <div class="cat-title center">${cat.name.toUpperCase()}</div>
+          <div class="line"></div>
+          <div class="row bold">
+            <span class="name">ITEM</span>
+            <span class="qty">QTY</span>
+            <span class="amt">AMT</span>
+          </div>
+          ${rows
+            .map(
+              r => `
+          <div class="row">
+            <span class="name">${r.name}</span>
+            <span class="qty">${r.qty}</span>
+            <span class="amt">${r.total.toFixed(0)}</span>
+          </div>`
+            )
+            .join('')}
+          <div class="line"></div>
+          <div class="row bold">
+            <span class="name">CAT TTL</span>
+            <span class="qty"></span>
+            <span class="amt">₹${catTotal.toFixed(0)}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    // Compute grand total across all categories
+    const grandTotal = orderedSections.reduce((sum, { data: cat }) => {
+      return sum + Object.values(cat.items).reduce((s, r) => s + r.total, 0);
+    }, 0);
+
+    const html = `
+      <html>
+        <head>
+          <title>KOT Summary - ${subTitle}</title>
+          <style>
+            @page { size: 3in auto; margin: 0; }
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              width: 3in;
+              max-width: 3in;
+              margin: 0 auto;
+              padding: 10px;
+              font-size: 11px;
+              color: #000;
+              line-height: 1.2;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .header-name { font-size: 11px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+            .sub { font-size: 9px; }
+            .cat-title { font-size: 10px; font-weight: bold; margin-top: 6px; }
+            .row { display: flex; justify-content: space-between; gap: 4px; margin: 2px 0; align-items: baseline; }
+            .name { flex: 1; min-width: 0; word-break: break-word; }
+            .qty { width: 22px; text-align: right; font-weight: bold; flex-shrink: 0; }
+            .amt { width: 36px; text-align: right; flex-shrink: 0; }
+            .grand-total { font-size: 12px; font-weight: bold; margin-top: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="center header-name">${restaurantInfo.name}</div>
+          <div class="center sub">${restaurantInfo.address}</div>
+          <div class="line"></div>
+          <div class="center bold">KOT SUMMARY</div>
+          <div class="center sub">${subTitle} · ${filterLabel}</div>
+          <div class="center sub">${new Date().toLocaleString()}</div>
+          <div class="line"></div>
+          ${sectionHtml || '<div class="center sub">No items</div>'}
+          <div class="line"></div>
+          <div class="row grand-total">
+            <span class="name">GRAND TOTAL</span>
+            <span class="qty"></span>
+            <span class="amt">₹${grandTotal.toFixed(0)}</span>
+          </div>
+          <div class="line"></div>
+          <div class="center sub" style="margin-top:6px;">End of summary</div>
+          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const renderTable = (data: Order[], emptyMessage: string = "No orders found.") => (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -253,6 +421,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date & Time</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Type</th>
+            <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Actions</th>
@@ -261,7 +430,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
         <tbody className="divide-y">
           {data.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-6 py-20 text-center text-gray-400">
+              <td colSpan={8} className="px-6 py-20 text-center text-gray-400">
                 <div className="flex flex-col items-center gap-2">
                   <PackageCheck size={48} className="opacity-20" />
                   <p className="font-bold text-lg">{emptyMessage}</p>
@@ -314,6 +483,20 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                      )}
                    </div>
                 </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border w-fit flex items-center gap-1 ${
+                    order.paymentMode === 'CASH' ? 'bg-green-50 text-green-700 border-green-200' :
+                    order.paymentMode === 'CARD' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                    order.paymentMode === 'UPI' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    order.paymentMode === 'DUE' ? 'bg-red-50 text-red-700 border-red-200' :
+                    'bg-gray-50 text-gray-700 border-gray-200'
+                  }`}>
+                    {order.paymentMode === 'CASH' && <Banknote size={10} />}
+                    {order.paymentMode === 'CARD' && <CreditCard size={10} />}
+                    {order.paymentMode === 'UPI' && <Smartphone size={10} />}
+                    {order.paymentMode}
+                  </span>
+                </td>
                 <td className="px-6 py-4 font-black text-gray-900">₹{(order.total || 0).toFixed(0)}</td>
                 <td className="px-6 py-4">
                   <StatusBadge status={order.status} />
@@ -351,7 +534,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                     )}
                     <ActionButton 
                       icon={<Trash2 size={16} />} 
-                      color="text-gray-400 hover:text-red-500" 
+                      color="text-red-500 hover:bg-red-50 border-red-100" 
                       tooltip="Delete Order" 
                       onClick={() => {
                         if (confirm(`Are you sure you want to delete order ${order.billNo}?`)) {
@@ -402,12 +585,112 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
               className="bg-white border rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#F57C00] outline-none w-full md:w-48 md:focus:w-64 transition-all"
              />
            </div>
+            <select
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value as PaymentMode | 'ALL')}
+                className="bg-white border rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-[#F57C00] outline-none transition-all cursor-pointer"
+              >
+                <option value="ALL">All Payments</option>
+                <option value="CASH">Cash</option>
+                <option value="CARD">Card</option>
+                <option value="UPI">UPI</option>
+                <option value="DUE">Due</option>
+              </select>
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="bg-white border rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-[#F57C00] outline-none transition-all cursor-pointer"
+              >
+                <option value="ALL">All Months</option>
+                {availableMonths.map(m => {
+                  const [y, mo] = m.split('-');
+                  const label = new Date(Number(y), Number(mo) - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+                  return <option key={m} value={m}>{label}</option>;
+                })}
+              </select>
            <button 
             onClick={() => exportToPDF(displayedOrders, isAllBillsView ? (activeTab === 'TODAY' ? "Today" : "History") : title)}
             className="bg-[#F57C00] text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-black hover:bg-orange-600 transition-all flex items-center gap-1 md:gap-2 shadow-lg shadow-orange-100 active:scale-95 shrink-0"
            >
-             <FileText size={16} /> <span className="hidden sm:inline">Export</span>
+            <FileText size={16} /> <span className="hidden sm:inline">PDF</span>
            </button>
+           <div className="relative">
+             <button 
+              onClick={() => setShowCsvMenu(!showCsvMenu)}
+              className="bg-green-600 text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-black hover:bg-green-700 transition-all flex items-center gap-1 md:gap-2 shadow-lg shadow-green-100 active:scale-95 shrink-0"
+             >
+              <Download size={16} /> <span className="hidden sm:inline">CSV</span>
+             </button>
+             {showCsvMenu && (
+               <>
+                 <div className="fixed inset-0 z-40" onClick={() => setShowCsvMenu(false)} />
+                 <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 py-2 w-56 max-h-72 overflow-y-auto">
+                   <div className="px-3 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Export CSV by Period</div>
+                   {[{ value: 'ALL', label: 'All Orders' }, { value: 'TODAY', label: "Today's Orders" }, ...availableMonths.map(m => {
+                     const [y, mo] = m.split('-');
+                     return { value: m, label: new Date(Number(y), Number(mo) - 1).toLocaleString('default', { month: 'long', year: 'numeric' }) };
+                   })].map(opt => (
+                     <button
+                       key={opt.value}
+                       className="w-full text-left px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors flex items-center gap-2"
+                       onClick={() => {
+                         setShowCsvMenu(false);
+                         // Filter orders based on selection
+                         let exportOrders: Order[] = [];
+                         if (opt.value === 'ALL') {
+                           exportOrders = safeOrders;
+                         } else if (opt.value === 'TODAY') {
+                           exportOrders = todayOrders;
+                         } else {
+                           exportOrders = safeOrders.filter(o => o.date && o.date.startsWith(opt.value));
+                         }
+                         if (exportOrders.length === 0) { alert('No orders for this period.'); return; }
+                         // Drink category detection for GST/VAT split
+                         const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+                         const isDrinkCat = (catId: string) => {
+                           const cat = categories.find(c => c.id === catId);
+                           return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
+                         };
+                         const headers = ['Bill No','Customer','Date','Time','Items','Order Type','Payment Mode','Subtotal','GST','VAT','Tax Total','Total'];
+                         const escCSV = (v: string) => `"${String(v || '').replace(/"/g, '""')}"`;
+                         const rows = exportOrders.map(o => {
+                           const foodSub = (o.items || []).reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? (i.price * i.quantity) : 0), 0);
+                           const drinkSub = (o.items || []).reduce((s, i) => s + (isDrinkCat(i.categoryId) ? (i.price * i.quantity) : 0), 0);
+                           const gst = foodSub * taxRate;
+                           const vat = drinkSub * drinkTaxRate;
+                           return [
+                            escCSV(o.billNo),
+                            escCSV(o.customerName || 'Guest'),
+                            escCSV(o.date),
+                            escCSV(o.time),
+                            escCSV((o.items || []).map(i => `${i.name} x${i.quantity}`).join('; ')),
+                            escCSV(o.orderType.replace('_', ' ')),
+                            escCSV(o.paymentMode),
+                            (o.subtotal || 0).toFixed(2),
+                            gst.toFixed(2),
+                            vat.toFixed(2),
+                            (o.tax || 0).toFixed(2),
+                            (o.total || 0).toFixed(2),
+                           ].join(',');
+                         });
+                         const csv = [headers.join(','), ...rows].join('\n');
+                         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                         const url = URL.createObjectURL(blob);
+                         const a = document.createElement('a');
+                         a.href = url;
+                         a.download = `bills_${opt.value.toLowerCase()}.csv`;
+                         a.click();
+                         URL.revokeObjectURL(url);
+                       }}
+                     >
+                       <Download size={14} className="text-green-500" />
+                       {opt.label}
+                     </button>
+                   ))}
+                 </div>
+               </>
+             )}
+           </div>
         </div>
       </div>
 
@@ -443,6 +726,40 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             count={allOrders.length}
             icon={<History size={16} />}
           />
+        </div>
+      )}
+
+      {isAllBillsView && (
+        <div className="px-4 md:px-6 py-2 border-b bg-white flex flex-wrap items-center gap-2 shadow-sm">
+          <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider shrink-0">KOT (2&quot;)</span>
+          <select
+            value={kotCategoryId}
+            onChange={(e) => setKotCategoryId(e.target.value)}
+            className="flex-1 min-w-[160px] md:min-w-[200px] max-w-md border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-gray-800 bg-gray-50 focus:ring-2 focus:ring-[#F57C00] outline-none"
+            aria-label="KOT category"
+          >
+            <option value="all">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() =>
+              exportKOTSummary(
+                displayedOrders,
+                activeTab === 'TODAY' ? 'Today' : 'History',
+                kotCategoryId as 'all' | string
+              )
+            }
+            disabled={displayedOrders.length === 0}
+            className="bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-black transition-all flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            <Printer size={16} />
+            Print KOT
+          </button>
         </div>
       )}
 
@@ -527,6 +844,17 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                       <CheckCircle size={14} />
                     </button>
                   )}
+                  <button 
+                    onClick={() => {
+                      if (confirm(`Are you sure you want to delete order ${order.billNo}?`)) {
+                        onDeleteOrder(order.id);
+                      }
+                    }}
+                    className="py-2 px-3 bg-red-50 text-red-500 border border-red-100 rounded-xl text-xs font-bold transition-colors hover:bg-red-100 shrink-0"
+                    title="Delete Order"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             ))
@@ -577,12 +905,9 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                   {selectedOrder.items.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-white p-3 border border-gray-100 rounded-xl">
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${item.isVeg || item.selectedVegChoice === 'VEG' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${item.selectedVegChoice === 'SEAFOOD' ? 'bg-blue-500' : (item.isVeg || item.selectedVegChoice === 'VEG') ? 'bg-green-500' : 'bg-red-500'}`}></div>
                         <div>
-                          <p className="font-bold text-gray-800 text-sm">{item.name}</p>
-                          {item.selectedAddons?.length ? (
-                            <p className="text-[10px] text-orange-600 font-bold">+ {item.selectedAddons.map(a => a.name).join(', ')}</p>
-                          ) : null}
+                          <p className="font-bold text-gray-800 text-sm">{item.name}{item.selectedPortion ? ` (${item.selectedPortion === 'HALF' ? 'Half' : 'Full'})` : ''}</p>
                           <p className="text-[10px] text-gray-400 font-bold">₹{item.price} x {item.quantity}</p>
                         </div>
                       </div>
@@ -638,6 +963,18 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                   <PackageCheck size={20} /> Complete Order
                 </button>
               )}
+              <button 
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete order ${selectedOrder.billNo}?`)) {
+                    onDeleteOrder(selectedOrder.id);
+                    setSelectedOrder(null);
+                  }
+                }}
+                className="flex-shrink-0 bg-red-50 text-red-500 py-4 px-4 rounded-2xl font-black hover:bg-red-100 transition-all flex items-center justify-center gap-2 shadow-sm border border-red-100"
+                title="Delete Order"
+              >
+                <Trash2 size={20} />
+              </button>
             </div>
           </div>
         </div>
