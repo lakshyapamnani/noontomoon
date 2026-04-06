@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Printer, ShoppingCart } from 'lucide-react';
 import { Table, CartItem, Floor } from '../types';
 
 export type TableCart = Record<string, { items: CartItem[]; customerName: string }>;
@@ -9,6 +10,8 @@ interface TablesGridProps {
   tableCarts: TableCart;
   selectedTableId?: string | null;
   onSelectTable: (tableId: string) => void;
+  onPrintTable?: (tableId: string) => void;
+  onCheckoutTable?: (tableId: string) => void;
 }
 
 const TablesGrid: React.FC<TablesGridProps> = ({
@@ -17,14 +20,18 @@ const TablesGrid: React.FC<TablesGridProps> = ({
   tableCarts,
   selectedTableId,
   onSelectTable,
+  onPrintTable,
+  onCheckoutTable,
 }) => {
-  const tableItemCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
+  const tableStats = useMemo(() => {
+    const stats: Record<string, { itemCount: number; total: number }> = {};
     for (const t of tables) {
       const items = tableCarts?.[t.id]?.items || [];
-      counts[t.id] = items.reduce((sum, it) => sum + (it.quantity || 0), 0);
+      const itemCount = items.reduce((sum, it) => sum + (it.quantity || 0), 0);
+      const total = items.reduce((sum, it) => sum + (it.price || 0) * (it.quantity || 0), 0);
+      stats[t.id] = { itemCount, total };
     }
-    return counts;
+    return stats;
   }, [tables, tableCarts]);
 
   const floorSections = useMemo(() => {
@@ -53,7 +60,7 @@ const TablesGrid: React.FC<TablesGridProps> = ({
   }, [tables, floors]);
 
   const renderCard = (table: Table) => {
-    const itemCount = tableItemCounts[table.id] || 0;
+    const { itemCount, total } = tableStats[table.id] || { itemCount: 0, total: 0 };
     const isOccupied = table.status === 'OCCUPIED' || itemCount > 0;
     const isSelected = selectedTableId === table.id;
     const seats = table.capacity ?? 2;
@@ -92,6 +99,55 @@ const TablesGrid: React.FC<TablesGridProps> = ({
             </div>
           )}
         </div>
+
+        {/* Bill Amount & Print Icon */}
+        {isOccupied && total > 0 && (
+          <div className="mt-3 flex items-center justify-between pt-2 border-t border-orange-200/60">
+            <span className="text-sm font-black text-[#F57C00]">₹{total.toFixed(0)}</span>
+            <div className="flex items-center gap-1.5">
+              {onCheckoutTable && (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCheckoutTable(table.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      onCheckoutTable(table.id);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg bg-[#262626] border border-gray-700 text-white hover:bg-black transition-all shadow-sm cursor-pointer"
+                  title="Checkout"
+                >
+                  <ShoppingCart size={14} />
+                </div>
+              )}
+              {onPrintTable && (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPrintTable(table.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      onPrintTable(table.id);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg bg-white border border-orange-200 text-[#F57C00] hover:bg-orange-100 transition-all shadow-sm cursor-pointer"
+                  title="Print Bill"
+                >
+                  <Printer size={14} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </button>
     );
   };
@@ -132,4 +188,3 @@ const TablesGrid: React.FC<TablesGridProps> = ({
 };
 
 export default TablesGrid;
-

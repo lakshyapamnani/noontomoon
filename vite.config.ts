@@ -18,9 +18,9 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           includeAssets: ['dronaiconn.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
           manifest: {
-            name: 'Drona POS',
-            short_name: 'DronaPOS',
-            description: 'Point of Sale System for Drona',
+            name: 'Noon To Moon POS',
+            short_name: 'NoonToMoonPOS',
+            description: 'Point of Sale System for Noon To Moon',
             theme_color: '#F57C00',
             background_color: '#ffffff',
             display: 'standalone',

@@ -146,7 +146,7 @@ const App: React.FC = () => {
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>(() => {
     const saved = localStorage.getItem('drona_restaurant_info');
     return saved ? JSON.parse(saved) : {
-      name: 'DRONA POS CAFE',
+      name: 'NOON TO MOON CAFE',
       phone: '+91 9876543210',
       address: '123 Main Street, Food Park, City'
     };
@@ -356,7 +356,7 @@ const App: React.FC = () => {
             const savedDrinkTax = localStorage.getItem('drona_drink_tax_rate');
             const drinkTaxRateVal = savedDrinkTax ? parseFloat(savedDrinkTax) : 0;
             const restaurantVal = { 
-              name: user?.displayName || 'DRONA POS CAFE', 
+              name: user?.displayName || 'NOON TO MOON CAFE', 
               phone: '+91 9876543210', 
               address: '123 Main Street, Food Park, City' 
             };
@@ -905,6 +905,85 @@ const App: React.FC = () => {
     }
   };
 
+  // Print bill for a table from the tables screen
+  const handlePrintTableBill = (tableId: string) => {
+    const cart = tableCarts[tableId];
+    if (!cart || !cart.items || cart.items.length === 0) {
+      alert('No items on this table to print.');
+      return;
+    }
+    const items = cart.items;
+    const subtotal = items.reduce((sum, it) => sum + (it.price || 0) * (it.quantity || 0), 0);
+    const taxAmount = subtotal * taxRate;
+    const total = subtotal + taxAmount;
+    const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
+    const customerName = cart.customerName || 'Guest';
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <html>
+        <head>
+          <style>
+            @page { size: 3in 10in; margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 3in; 
+              margin: 0; 
+              padding: 10px; 
+              font-size: 11px; 
+              color: #000; 
+              line-height: 1.2;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 1px dashed #000; margin: 8px 0; }
+            .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+            .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
+            .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; }
+            .qty { width: 25px; text-align: center; }
+            .price { width: 45px; text-align: right; }
+            .total-section { font-size: 12px; margin-top: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="center header-name">${restaurantInfo.name}</div>
+          <div class="center">${restaurantInfo.address}</div>
+          <div class="center">Tel: ${restaurantInfo.phone}</div>
+          ${restaurantInfo.gstNo ? `<div class="center" style="font-size:10px;">GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
+          <div class="line"></div>
+          <div class="center bold">${tableName} - RUNNING BILL</div>
+          <div>Cust: ${customerName}</div>
+          <div>Date: ${new Date().toLocaleDateString()}</div>
+          <div>Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          <div class="line"></div>
+          <div class="bold item-row">
+            <span class="item-name">Item</span>
+            <span class="qty">Qty</span>
+            <span class="price">Amt</span>
+          </div>
+          ${items.map(it => `
+            <div class="item-row">
+              <span class="item-name">${it.name}${it.selectedAddons?.length ? ' + ' + it.selectedAddons.map(a => a.name).join(', ') : ''}</span>
+              <span class="qty">${it.quantity}</span>
+              <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
+            </div>
+          `).join('')}
+          <div class="line"></div>
+          <div class="item-row"><span>Subtotal:</span><span>₹${subtotal.toFixed(0)}</span></div>
+          <div class="item-row"><span>Tax (${(taxRate * 100).toFixed(0)}%):</span><span>₹${taxAmount.toFixed(0)}</span></div>
+          <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${total.toFixed(0)}</span></div>
+          <div class="line"></div>
+          <div class="center" style="margin-top:8px; font-size:10px;">** Running Bill - Not Final **</div>
+          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const renderScreen = () => {
     switch (activeScreen) {
       case 'TABLES':
@@ -917,6 +996,57 @@ const App: React.FC = () => {
             onSelectTable={(tableId) => {
               setSelectedTableId(tableId);
               setActiveScreen('BILLING');
+            }}
+            onPrintTable={handlePrintTableBill}
+            onCheckoutTable={(tableId) => {
+              const cart = tableCarts[tableId];
+              if (!cart || !cart.items || cart.items.length === 0) {
+                alert('No items on this table to checkout.');
+                return;
+              }
+              const items = cart.items;
+              const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
+              const customerName = cart.customerName || 'Guest';
+
+              // Compute subtotals (food vs drink for GST/VAT split)
+              const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+              const isDrinkCat = (catId: string) => {
+                const cat = categories.find(c => c.id === catId);
+                return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
+              };
+              const foodSub = items.reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
+              const drinkSub = items.reduce((s, i) => s + (isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
+              const subtotal = foodSub + drinkSub;
+              const tax = (foodSub * taxRate) + (drinkSub * drinkTaxRate);
+              const total = subtotal + tax;
+
+              const d = new Date();
+              const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+              const newOrder: Order = {
+                id: Math.random().toString(36).substr(2, 9),
+                billNo: `INV-${Date.now().toString().substr(-6)}`,
+                customerName,
+                tableId,
+                tableName,
+                date: dateStr,
+                time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                items: [...items],
+                subtotal,
+                tax,
+                total,
+                paymentMode: 'CASH',
+                orderType: 'DINE_IN',
+                staffName: 'Admin',
+                status: 'COMPLETED'
+              };
+
+              handleCreateOrder(newOrder);
+              // Clear table cart and reset status
+              const newCarts = { ...tableCarts };
+              newCarts[tableId] = { items: [], customerName: '' };
+              handleUpdateTableCarts(newCarts);
+              handleUpdateTableStatus(tableId, 'AVAILABLE');
             }}
           />
         );
@@ -1228,7 +1358,7 @@ const App: React.FC = () => {
               <MenuIcon size={24} className="text-gray-600" />
             </button>
             <div className="hidden md:flex items-center gap-2">
-               <span className="text-[#F57C00] font-bold text-lg">DRONA</span>
+               <span className="text-[#F57C00] font-bold text-lg">NOON TO MOON</span>
                <div className="h-6 w-px bg-gray-200 mx-2"></div>
                <button
                  onClick={() => setActiveScreen('TABLES')}

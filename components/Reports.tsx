@@ -176,7 +176,7 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `DRONA_POS_Sales_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `NOON_TO_MOON_POS_Sales_Report_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -195,7 +195,7 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
     const html = `
       <html>
         <head>
-          <title>DRONA POS - Sales Report</title>
+          <title>NOON TO MOON POS - Sales Report</title>
           <style>
             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
             .header { text-align: center; border-bottom: 2px solid #F57C00; padding-bottom: 20px; margin-bottom: 30px; }
@@ -212,7 +212,7 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
         </head>
         <body>
           <div class="header">
-            <h1>DRONA POS - Sales Report</h1>
+            <h1>NOON TO MOON POS - Sales Report</h1>
             <div class="meta">Generated on: ${new Date().toLocaleString()}</div>
             ${startDate || endDate ? `<div class="meta">Period: ${startDate || 'Start'} to ${endDate || 'End'}</div>` : ''}
           </div>

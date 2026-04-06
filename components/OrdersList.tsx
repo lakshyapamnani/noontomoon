@@ -17,11 +17,13 @@ import {
   Filter,
   X,
   MapPin,
+  Calendar,
   Phone,
   CreditCard,
   Banknote,
   Smartphone,
-  Trash2
+  Trash2,
+  Download
 } from 'lucide-react';
 import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
 
@@ -40,15 +42,18 @@ interface OrdersListProps {
   onDeleteOrder: (id: string) => void;
   restaurantInfo: RestaurantInfo;
   taxRate: number;
+  drinkTaxRate?: number;
   categories?: Category[];
 }
 
-const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, categories = [] }) => {
+const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [] }) => {
   const isAllBillsView = title === "All Bills";
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ALL'>('TODAY');
   const [kotCategoryId, setKotCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMode | 'ALL'>('ALL');
+  const [monthFilter, setMonthFilter] = useState<string>('ALL');
+  const [showCsvMenu, setShowCsvMenu] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   
   // Ensure orders is always an array
@@ -74,12 +79,28 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
     };
   }, [safeOrders]);
 
+  // Derive available months from orders for the month dropdown
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    safeOrders.forEach(o => {
+      if (o.date && /^\d{4}-\d{2}/.test(o.date)) {
+        monthSet.add(o.date.substring(0, 7)); // 'YYYY-MM'
+      }
+    });
+    return Array.from(monthSet).sort().reverse();
+  }, [safeOrders]);
+
   const displayedOrders = useMemo(() => {
-    const list = isAllBillsView 
+    let list = isAllBillsView 
       ? (activeTab === 'TODAY' ? todayOrders : allOrders) 
       : safeOrders;
+
+    // Month filter
+    if (monthFilter !== 'ALL') {
+      list = list.filter(o => o.date && o.date.startsWith(monthFilter));
+    }
       
-    const paymentFiltered = isAllBillsView && paymentFilter !== 'ALL'
+    const paymentFiltered = paymentFilter !== 'ALL'
       ? list.filter(o => o.paymentMode === paymentFilter)
       : list;
     
@@ -89,7 +110,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       o.billNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
       o.customerName?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery, paymentFilter]);
+  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery, paymentFilter, monthFilter]);
 
   // Calculate total sale for displayed orders
   const totalSale = useMemo(() => {
@@ -108,10 +129,10 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       <html>
         <head>
           <style>
-            @page { size: 2in 10in; margin: 0; }
+            @page { size: 3in 10in; margin: 0; }
             body { 
               font-family: 'Courier New', Courier, monospace; 
-              width: 2in; 
+              width: 3in; 
               margin: 0; 
               padding: 10px; 
               font-size: 11px; 
@@ -200,7 +221,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           </style>
         </head>
         <body>
-          <h1>DRONA POS</h1>
+          <h1>NOON TO MOON POS</h1>
           <h2>${title} (${subTitle})</h2>
           <p>Generated: ${new Date().toLocaleString()}</p>
           <div class="summary">
@@ -225,6 +246,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                 <th>Time</th>
                 <th>Items</th>
                 <th>Type</th>
+                <th>Payment</th>
                 <th>Total</th>
                 <th>Status</th>
               </tr>
@@ -335,19 +357,24 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       })
       .join('');
 
+    // Compute grand total across all categories
+    const grandTotal = orderedSections.reduce((sum, { data: cat }) => {
+      return sum + Object.values(cat.items).reduce((s, r) => s + r.total, 0);
+    }, 0);
+
     const html = `
       <html>
         <head>
           <title>KOT Summary - ${subTitle}</title>
           <style>
-            @page { size: 58mm auto; margin: 0; }
+            @page { size: 3in auto; margin: 0; }
             body {
               font-family: 'Courier New', Courier, monospace;
-              width: 48mm;
-              max-width: 48mm;
+              width: 3in;
+              max-width: 3in;
               margin: 0 auto;
-              padding: 6px;
-              font-size: 10px;
+              padding: 10px;
+              font-size: 11px;
               color: #000;
               line-height: 1.2;
             }
@@ -361,6 +388,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             .name { flex: 1; min-width: 0; word-break: break-word; }
             .qty { width: 22px; text-align: right; font-weight: bold; flex-shrink: 0; }
             .amt { width: 36px; text-align: right; flex-shrink: 0; }
+            .grand-total { font-size: 12px; font-weight: bold; margin-top: 4px; }
           </style>
         </head>
         <body>
@@ -372,6 +400,12 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           <div class="center sub">${new Date().toLocaleString()}</div>
           <div class="line"></div>
           ${sectionHtml || '<div class="center sub">No items</div>'}
+          <div class="line"></div>
+          <div class="row grand-total">
+            <span class="name">GRAND TOTAL</span>
+            <span class="qty"></span>
+            <span class="amt">₹${grandTotal.toFixed(0)}</span>
+          </div>
           <div class="line"></div>
           <div class="center sub" style="margin-top:6px;">End of summary</div>
           <script>window.print(); setTimeout(() => window.close(), 500);</script>
@@ -391,6 +425,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date & Time</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Type</th>
+            <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
             <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Actions</th>
@@ -399,7 +434,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
         <tbody className="divide-y">
           {data.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-6 py-20 text-center text-gray-400">
+              <td colSpan={8} className="px-6 py-20 text-center text-gray-400">
                 <div className="flex flex-col items-center gap-2">
                   <PackageCheck size={48} className="opacity-20" />
                   <p className="font-bold text-lg">{emptyMessage}</p>
@@ -451,6 +486,20 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                        </span>
                      )}
                    </div>
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border w-fit flex items-center gap-1 ${
+                    order.paymentMode === 'CASH' ? 'bg-green-50 text-green-700 border-green-200' :
+                    order.paymentMode === 'CARD' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                    order.paymentMode === 'UPI' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    order.paymentMode === 'DUE' ? 'bg-red-50 text-red-700 border-red-200' :
+                    'bg-gray-50 text-gray-700 border-gray-200'
+                  }`}>
+                    {order.paymentMode === 'CASH' && <Banknote size={10} />}
+                    {order.paymentMode === 'CARD' && <CreditCard size={10} />}
+                    {order.paymentMode === 'UPI' && <Smartphone size={10} />}
+                    {order.paymentMode}
+                  </span>
                 </td>
                 <td className="px-6 py-4 font-black text-gray-900">₹{(order.total || 0).toFixed(0)}</td>
                 <td className="px-6 py-4">
@@ -540,25 +589,112 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
               className="bg-white border rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#F57C00] outline-none w-full md:w-48 md:focus:w-64 transition-all"
              />
            </div>
-           {isAllBillsView && (
-             <select
-               value={paymentFilter}
-               onChange={(e) => setPaymentFilter(e.target.value as PaymentMode | 'ALL')}
-               className="bg-white border rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-[#F57C00] outline-none transition-all cursor-pointer"
-             >
-               <option value="ALL">All Payments</option>
-               <option value="CASH">Cash</option>
-               <option value="CARD">Card</option>
-               <option value="UPI">UPI</option>
-               <option value="DUE">Due</option>
-             </select>
-           )}
+            <select
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value as PaymentMode | 'ALL')}
+                className="bg-white border rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-[#F57C00] outline-none transition-all cursor-pointer"
+              >
+                <option value="ALL">All Payments</option>
+                <option value="CASH">Cash</option>
+                <option value="CARD">Card</option>
+                <option value="UPI">UPI</option>
+                <option value="DUE">Due</option>
+              </select>
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="bg-white border rounded-xl px-3 py-2 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-[#F57C00] outline-none transition-all cursor-pointer"
+              >
+                <option value="ALL">All Months</option>
+                {availableMonths.map(m => {
+                  const [y, mo] = m.split('-');
+                  const label = new Date(Number(y), Number(mo) - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+                  return <option key={m} value={m}>{label}</option>;
+                })}
+              </select>
            <button 
             onClick={() => exportToPDF(displayedOrders, isAllBillsView ? (activeTab === 'TODAY' ? "Today" : "History") : title)}
             className="bg-[#F57C00] text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-black hover:bg-orange-600 transition-all flex items-center gap-1 md:gap-2 shadow-lg shadow-orange-100 active:scale-95 shrink-0"
            >
-            <FileText size={16} /> <span className="hidden sm:inline">Export</span>
+            <FileText size={16} /> <span className="hidden sm:inline">PDF</span>
            </button>
+           <div className="relative">
+             <button 
+              onClick={() => setShowCsvMenu(!showCsvMenu)}
+              className="bg-green-600 text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-black hover:bg-green-700 transition-all flex items-center gap-1 md:gap-2 shadow-lg shadow-green-100 active:scale-95 shrink-0"
+             >
+              <Download size={16} /> <span className="hidden sm:inline">CSV</span>
+             </button>
+             {showCsvMenu && (
+               <>
+                 <div className="fixed inset-0 z-40" onClick={() => setShowCsvMenu(false)} />
+                 <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 py-2 w-56 max-h-72 overflow-y-auto">
+                   <div className="px-3 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Export CSV by Period</div>
+                   {[{ value: 'ALL', label: 'All Orders' }, { value: 'TODAY', label: "Today's Orders" }, ...availableMonths.map(m => {
+                     const [y, mo] = m.split('-');
+                     return { value: m, label: new Date(Number(y), Number(mo) - 1).toLocaleString('default', { month: 'long', year: 'numeric' }) };
+                   })].map(opt => (
+                     <button
+                       key={opt.value}
+                       className="w-full text-left px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors flex items-center gap-2"
+                       onClick={() => {
+                         setShowCsvMenu(false);
+                         // Filter orders based on selection
+                         let exportOrders: Order[] = [];
+                         if (opt.value === 'ALL') {
+                           exportOrders = safeOrders;
+                         } else if (opt.value === 'TODAY') {
+                           exportOrders = todayOrders;
+                         } else {
+                           exportOrders = safeOrders.filter(o => o.date && o.date.startsWith(opt.value));
+                         }
+                         if (exportOrders.length === 0) { alert('No orders for this period.'); return; }
+                         // Drink category detection for GST/VAT split
+                         const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+                         const isDrinkCat = (catId: string) => {
+                           const cat = categories.find(c => c.id === catId);
+                           return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
+                         };
+                         const headers = ['Bill No','Customer','Date','Time','Items','Order Type','Payment Mode','Subtotal','GST','VAT','Tax Total','Total'];
+                         const escCSV = (v: string) => `"${String(v || '').replace(/"/g, '""')}"`;
+                         const rows = exportOrders.map(o => {
+                           const foodSub = (o.items || []).reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? (i.price * i.quantity) : 0), 0);
+                           const drinkSub = (o.items || []).reduce((s, i) => s + (isDrinkCat(i.categoryId) ? (i.price * i.quantity) : 0), 0);
+                           const gst = foodSub * taxRate;
+                           const vat = drinkSub * drinkTaxRate;
+                           return [
+                            escCSV(o.billNo),
+                            escCSV(o.customerName || 'Guest'),
+                            escCSV(o.date),
+                            escCSV(o.time),
+                            escCSV((o.items || []).map(i => `${i.name} x${i.quantity}`).join('; ')),
+                            escCSV(o.orderType.replace('_', ' ')),
+                            escCSV(o.paymentMode),
+                            (o.subtotal || 0).toFixed(2),
+                            gst.toFixed(2),
+                            vat.toFixed(2),
+                            (o.tax || 0).toFixed(2),
+                            (o.total || 0).toFixed(2),
+                           ].join(',');
+                         });
+                         const csv = [headers.join(','), ...rows].join('\n');
+                         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                         const url = URL.createObjectURL(blob);
+                         const a = document.createElement('a');
+                         a.href = url;
+                         a.download = `bills_${opt.value.toLowerCase()}.csv`;
+                         a.click();
+                         URL.revokeObjectURL(url);
+                       }}
+                     >
+                       <Download size={14} className="text-green-500" />
+                       {opt.label}
+                     </button>
+                   ))}
+                 </div>
+               </>
+             )}
+           </div>
         </div>
       </div>
 

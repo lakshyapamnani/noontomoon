@@ -18,7 +18,8 @@ import {
   Users,
   ArrowLeft,
   ChevronUp,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Addon, SelectedAddon, Floor } from '../types';
@@ -236,6 +237,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
   const [optionsItem, setOptionsItem] = useState<MenuItem | null>(null);
   const [menuType, setMenuType] = useState<'FOOD' | 'DRINK'>('FOOD');
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [mobileTab, setMobileTab] = useState<'tables' | 'menu' | 'bill'>('tables');
   const [isCategoryCollapsed, setIsCategoryCollapsed] = useState(false);
   const mobileTablesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -321,12 +323,19 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const filteredItems = useMemo(() => {
+    const query = menuSearchQuery.trim().toLowerCase();
+    if (query) {
+      // When searching, show items across all categories
+      return menuItems.filter(
+        item => item && item.name && item.name.toLowerCase().includes(query)
+      );
+    }
     // Filter by category - items must have a matching categoryId to appear
     const filtered = menuItems.filter(
       item => item && item.categoryId && String(item.categoryId) === String(selectedCategoryId)
     );
     return filtered;
-  }, [selectedCategoryId, menuItems]);
+  }, [selectedCategoryId, menuItems, menuSearchQuery]);
 
   // Get addons for the current category
   const getCategoryAddons = (categoryId: string) => {
@@ -483,154 +492,87 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const total = subtotal + tax;
 
   const printReceipt = async (order: Order) => {
-    const addonLineCount = order.items.reduce((count, item) => {
-      return count + (item.selectedAddons && item.selectedAddons.length > 0 ? 1 : 0);
-    }, 0);
-    const lineCount = order.items.length + addonLineCount;
-
-    const receiptWidthMm = 58;
-    const receiptHeightMm = Math.max(120, Math.min(280, 90 + lineCount * 6));
-
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: [receiptWidthMm, receiptHeightMm],
-      compress: true,
-    });
-
-    const xLeft = 2.5;
-    const xRight = receiptWidthMm - 2.5;
-    const xCenter = receiptWidthMm / 2;
-    let y = 5;
-
-    const writeCenter = (text: string, size = 8, bold = false) => {
-      pdf.setFont('courier', bold ? 'bold' : 'normal');
-      pdf.setFontSize(size);
-      pdf.text(text, xCenter, y, { align: 'center' });
-      y += 4;
-    };
-
-    const writeRow = (left: string, right: string, size = 7, bold = false) => {
-      pdf.setFont('courier', bold ? 'bold' : 'normal');
-      pdf.setFontSize(size);
-      pdf.text(left, xLeft, y);
-      pdf.text(right, xRight, y, { align: 'right' });
-      y += 3.8;
-    };
-
-    const writeLine = () => {
-      pdf.setDrawColor(0);
-      pdf.setLineWidth(0.15);
-      pdf.line(xLeft, y, xRight, y);
-      y += 2.8;
-    };
-
-    writeCenter(restaurantInfo.name, 9, true);
-    writeCenter(restaurantInfo.address, 7);
-    writeCenter(`Tel: ${restaurantInfo.phone}`, 7);
-    writeLine();
-
-    writeRow(`Bill: ${order.billNo}`, '');
-    if (order.customerName) writeRow(`Cust: ${order.customerName}`, '');
-    writeRow(`Date: ${order.date}`, '');
-    writeRow(`Time: ${order.time}`, '');
-    writeRow(`Type: ${order.orderType}`, '');
-    writeLine();
-
-    writeRow('Item', 'Qty   Amt', 7, true);
-    order.items.forEach((it) => {
-      const itemName = it.selectedAddons?.length
-        ? `${it.name} + ${it.selectedAddons.map(a => a.name).join(', ')}`
-        : it.name;
-      const wrapped = pdf.splitTextToSize(itemName, 28) as string[];
-      wrapped.forEach((line, idx) => {
-        if (idx === 0) {
-          writeRow(line, `${it.quantity}   ${(it.price * it.quantity).toFixed(0)}`);
-        } else {
-          writeRow(line, '');
-        }
-      });
-    });
-
-    writeLine();
-    writeRow('Subtotal:', `Rs ${order.subtotal.toFixed(0)}`);
-    writeRow('GST:', `Rs ${gst.toFixed(0)}`);
-    writeRow('VAT:', `Rs ${vat.toFixed(0)}`);
-    writeRow('Tax Total:', `Rs ${order.tax.toFixed(0)}`);
-    writeRow('TOTAL:', `Rs ${order.total.toFixed(0)}`, 8, true);
-    writeLine();
-
-    writeCenter(`Paid via ${order.paymentMode}`, 7, true);
-    writeCenter(`Scan to Pay Rs ${order.total.toFixed(0)}`, 7, true);
-
-    const upiUrl = `upi://pay?pa=${BILL_UPI_ID}&pn=${encodeURIComponent(restaurantInfo.name)}&am=${order.total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + order.billNo)}`;
-    try {
-      const qrDataUrl = await QRCode.toDataURL(upiUrl, { width: 220, margin: 0 });
-      const qrSize = 24;
-      const qrX = (receiptWidthMm - qrSize) / 2;
-      if (y + qrSize + 10 <= receiptHeightMm) {
-        pdf.addImage(qrDataUrl, 'PNG', qrX, y, qrSize, qrSize);
-        y += qrSize + 3;
-      }
-    } catch {
-      // Continue without QR if generation fails.
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Unable to open print window. Please allow pop-ups.');
+      return;
     }
 
-    writeCenter(`UPI: ${BILL_UPI_ID}`, 6);
-    writeCenter('Thank you!', 7, true);
-    writeCenter('Visit again.', 7, true);
-
-    const blob = pdf.output('blob');
-    const blobUrl = URL.createObjectURL(blob);
-
-    const iframe = document.createElement('iframe');
-    iframe.setAttribute('aria-hidden', 'true');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    iframe.style.visibility = 'hidden';
-    iframe.src = blobUrl;
-    document.body.appendChild(iframe);
-
-    let cleanedUp = false;
-    const cleanup = () => {
-      if (cleanedUp) return;
-      cleanedUp = true;
-      URL.revokeObjectURL(blobUrl);
-      if (document.body.contains(iframe)) {
-        document.body.removeChild(iframe);
-      }
-    };
-
-    iframe.onload = () => {
-      const printWindow = iframe.contentWindow;
-      if (!printWindow) {
-        cleanup();
-        alert('Unable to open print preview. Please try again.');
-        return;
-      }
-
-      // Cleanup only after print completes (or fallback after a delay).
-      const handleAfterPrint = () => {
-        printWindow.removeEventListener('afterprint', handleAfterPrint);
-        cleanup();
-      };
-      printWindow.addEventListener('afterprint', handleAfterPrint);
-
-      // Safety fallback in case afterprint doesn't fire on some browsers.
-      window.setTimeout(() => {
-        cleanup();
-      }, 60000);
-
-      // Slight delay gives embedded PDF viewers time to initialize.
-      window.setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-      }, 200);
-    };
+    const html = `
+      <html>
+        <head>
+          <title>Receipt - ${order.billNo}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              width: 76mm;
+              max-width: 76mm;
+              margin: 0 auto;
+              padding: 3mm;
+              font-size: 11px;
+              color: #000;
+              line-height: 1.3;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
+            .item-name { flex: 1; min-width: 0; word-break: break-word; }
+            .qty { width: 24px; text-align: center; font-weight: bold; flex-shrink: 0; }
+            .amt { width: 40px; text-align: right; flex-shrink: 0; }
+            .addon-row { font-size: 9px; color: #555; padding-left: 8px; margin: 1px 0; }
+            .total-section { font-size: 13px; font-weight: bold; margin-top: 4px; }
+            .footer { font-size: 10px; margin-top: 8px; }
+          </style>
+        </head>
+        <body>
+          <div class="center header-name">${restaurantInfo.name}</div>
+          <div class="center">${restaurantInfo.address}</div>
+          <div class="center">Tel: ${restaurantInfo.phone}</div>
+          ${restaurantInfo.gstNo ? `<div class="center" style="font-size:10px;">GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
+          <div class="line"></div>
+          <div>Bill: ${order.billNo}</div>
+          ${order.customerName ? `<div>Cust: ${order.customerName}</div>` : ''}
+          <div>Date: ${order.date}</div>
+          <div>Time: ${order.time}</div>
+          <div>Type: ${order.orderType.replace('_', ' ')}</div>
+          <div class="line"></div>
+          <div class="row bold">
+            <span class="item-name">Item</span>
+            <span class="qty">Qty</span>
+            <span class="amt">Amt</span>
+          </div>
+          ${order.items.map(it => `
+            <div class="row">
+              <span class="item-name">${it.name}</span>
+              <span class="qty">${it.quantity}</span>
+              <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+            </div>
+            ${it.selectedAddons?.length ? `<div class="addon-row">+ ${it.selectedAddons.map(a => a.name).join(', ')}</div>` : ''}
+          `).join('')}
+          <div class="line"></div>
+          <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
+          <div class="row"><span>GST:</span><span>Rs ${gst.toFixed(0)}</span></div>
+          <div class="row"><span>VAT:</span><span>Rs ${vat.toFixed(0)}</span></div>
+          <div class="row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
+          <div class="row bold total-section"><span>TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
+          <div class="line"></div>
+          <div class="center bold">Paid via ${order.paymentMode}</div>
+          <div class="footer center">
+            <p class="bold">Thank you!</p>
+            <p class="bold">Visit again.</p>
+          </div>
+          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const handlePlaceOrder = (print = false) => {
@@ -859,6 +801,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 className="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-gray-50 p-3"
                 style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'none', touchAction: 'pan-y' }}
               >
+                {/* Mobile Search Bar */}
+                <div className="relative mb-3">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search menu items..."
+                    value={menuSearchQuery}
+                    onChange={(e) => setMenuSearchQuery(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-[#F57C00] outline-none"
+                  />
+                </div>
                 {!selectedTableId ? (
                   <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">
                     Select a table to start adding items
@@ -1178,6 +1131,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         </div>
 
         <div className="flex-1 bg-gray-50 p-6 overflow-y-auto custom-scrollbar">
+          {/* Desktop Search Bar */}
+          <div className="relative mb-4 max-w-md">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search menu items..."
+              value={menuSearchQuery}
+              onChange={(e) => setMenuSearchQuery(e.target.value)}
+              className="w-full bg-white border-2 border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-[#F57C00] focus:border-[#F57C00] outline-none transition-all"
+            />
+          </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
           {filteredItems.map(item => (
             <button

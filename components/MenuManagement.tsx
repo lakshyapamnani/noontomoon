@@ -622,6 +622,16 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none resize-none shadow-inner placeholder:text-gray-400" 
                      />
                    </div>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">GST Number</label>
+                     <input 
+                      type="text" 
+                      value={localRestaurantInfo.gstNo || ''} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, gstNo: e.target.value})}
+                      placeholder="e.g., 27AAAAA0000A1Z5"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                     />
+                   </div>
                    <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95">
                      <Save size={20} /> Save Business Profile
                    </button>

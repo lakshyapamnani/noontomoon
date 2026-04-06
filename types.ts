@@ -22,6 +22,7 @@ export interface RestaurantInfo {
   name: string;
   phone: string;
   address: string;
+  gstNo?: string;
 }
 
 export type VegType = 'VEG' | 'NON_VEG' | 'BOTH';
