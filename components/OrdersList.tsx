@@ -118,8 +118,15 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
   }, [displayedOrders]);
 
   const printReceipt = (order: Order) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
+      return;
+    }
 
     const html = `
       <html>
@@ -182,18 +189,41 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             <p>Thank you!</p>
             <p>Visit again.</p>
           </div>
-          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => {
+                window.parent.postMessage('print-done', '*');
+              }, 500);
+            };
+          </script>
         </body>
       </html>
     `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'print-done') {
+        document.body.removeChild(iframe);
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
   };
 
   const exportToPDF = (data: Order[], subTitle: string) => {
     if (!data || data.length === 0) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
+      return;
+    }
 
     const pdfTotalSale = data.reduce((sum, o) => sum + (o.subtotal || 0), 0);
     const pdfTotalRevenue = data.reduce((sum, o) => sum + (o.total || 0), 0);
@@ -261,18 +291,41 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
               `).join('')}
             </tbody>
           </table>
-          <script>window.print();</script>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => {
+                window.parent.postMessage('print-done', '*');
+              }, 500);
+            };
+          </script>
         </body>
       </html>
     `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'print-done') {
+        document.body.removeChild(iframe);
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
   };
 
   const exportKOTSummary = (data: Order[], subTitle: string, categoryFilter: 'all' | string) => {
     if (!data || data.length === 0) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
+      return;
+    }
 
     const categoryMap: Record<string, { name: string; items: Record<string, { name: string; qty: number; total: number }> }> = {};
 
@@ -404,12 +457,28 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           </div>
           <div class="line"></div>
           <div class="center sub" style="margin-top:6px;">End of summary</div>
-          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => {
+                window.parent.postMessage('print-done', '*');
+              }, 500);
+            };
+          </script>
         </body>
       </html>
     `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'print-done') {
+        document.body.removeChild(iframe);
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
   };
 
   const renderTable = (data: Order[], emptyMessage: string = "No orders found.") => (
