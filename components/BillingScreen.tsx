@@ -491,9 +491,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const total = subtotal + tax;
 
   const printReceipt = async (order: Order) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Unable to open print window. Please allow pop-ups.');
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      alert('Unable to create print frame.');
+      document.body.removeChild(iframe);
       return;
     }
 
@@ -566,13 +571,38 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             <p class="bold">Thank you!</p>
             <p class="bold">Visit again.</p>
           </div>
-          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => {
+                window.parent.postMessage('print-done', '*');
+              }, 500);
+            };
+          </script>
         </body>
       </html>
     `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    // Clean up iframe after printing
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'print-done') {
+        document.body.removeChild(iframe);
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    
+    // Fallback cleanup if message fails
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 5000);
   };
+
 
   const handlePlaceOrder = (print = false) => {
     const selectedTableItems = selectedTableId
