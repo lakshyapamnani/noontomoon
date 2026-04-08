@@ -41,6 +41,7 @@ export interface MenuItem {
   halfPrice?: number;
   image?: string;
   quantityStr?: string;
+  mlPrices?: Record<string, number>;
 }
 
 export interface Category {
@@ -53,6 +54,7 @@ export interface CartItem extends MenuItem {
   quantity: number;
   selectedVegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD';
   selectedPortion?: 'HALF' | 'FULL';
+  selectedMl?: string;
 }
 
 export interface Order {

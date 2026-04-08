@@ -29,40 +29,51 @@ const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
 
 interface ItemOptionsPopupProps {
   item: MenuItem;
-  onConfirm: (choice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null) => void;
+  onConfirm: (choice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null, mlChoice?: string | null) => void;
   onClose: () => void;
 }
 
 const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, onConfirm, onClose }) => {
   const [vegChoice, setVegChoice] = useState<'VEG' | 'NON_VEG' | 'SEAFOOD' | null>(item.vegType === 'BOTH' ? null : null);
   const [portionChoice, setPortionChoice] = useState<'HALF' | 'FULL' | null>(item.hasPortions ? null : null);
+  const [mlChoice, setMlChoice] = useState<string | null>(null);
+
+  const hasMlPrices = item.mlPrices && Object.keys(item.mlPrices).length > 0;
+  const mlEntries = hasMlPrices ? Object.entries(item.mlPrices!) : [];
 
   const handleConfirm = () => {
     // For BOTH type items, veg choice is required
     if (item.vegType === 'BOTH' && !vegChoice) return;
     // For portions, portion choice is required
     if (item.hasPortions && !portionChoice) return;
+    // For ML items, ml choice is required
+    if (hasMlPrices && !mlChoice) return;
     
-    onConfirm(vegChoice, portionChoice);
+    onConfirm(vegChoice, portionChoice, mlChoice);
   };
 
   // Calculate total price
-  const vegBasePrice = item.vegType === 'BOTH' 
-    ? (vegChoice === 'VEG' ? item.vegPrice : vegChoice === 'NON_VEG' ? item.nonVegPrice : vegChoice === 'SEAFOOD' ? item.seafoodPrice : 0) 
-    : item.price;
-    
-  const basePrice = (item.hasPortions && portionChoice === 'HALF') ? (item.halfPrice || 0) : vegBasePrice;
-  const totalPrice = (basePrice || 0);
+  let totalPrice = 0;
+  if (hasMlPrices && mlChoice) {
+    totalPrice = item.mlPrices![mlChoice] || 0;
+  } else if (item.vegType === 'BOTH') {
+    const vegBasePrice = vegChoice === 'VEG' ? item.vegPrice : vegChoice === 'NON_VEG' ? item.nonVegPrice : vegChoice === 'SEAFOOD' ? item.seafoodPrice : 0;
+    totalPrice = (item.hasPortions && portionChoice === 'HALF') ? (item.halfPrice || 0) : (vegBasePrice || 0);
+  } else if (item.hasPortions && portionChoice === 'HALF') {
+    totalPrice = item.halfPrice || 0;
+  } else {
+    totalPrice = item.price;
+  }
 
-  // If no options needed (not BOTH, no portions), auto-confirm
+  // If no options needed (not BOTH, no portions, no ML), auto-confirm
   useEffect(() => {
-    if (item.vegType !== 'BOTH' && !item.hasPortions) {
-      onConfirm(null, null);
+    if (item.vegType !== 'BOTH' && !item.hasPortions && !hasMlPrices) {
+      onConfirm(null, null, null);
     }
   }, []);
 
   // Only show popup if there are options to select
-  if (item.vegType !== 'BOTH' && !item.hasPortions) {
+  if (item.vegType !== 'BOTH' && !item.hasPortions && !hasMlPrices) {
     return null;
   }
 
@@ -157,7 +168,28 @@ const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, onConfirm, on
           </div>
         )}
 
-
+        {/* ML Size Choice - for drinks with multiple sizes */}
+        {hasMlPrices && (
+          <div className="mb-5">
+            <label className="block text-xs font-black text-gray-500 mb-2 uppercase">Choose Size *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {mlEntries.map(([size, price]) => (
+                <button
+                  key={size}
+                  onClick={() => setMlChoice(size)}
+                  className={`py-3 px-2 rounded-xl font-black transition-all flex flex-col items-center gap-1 border-2 ${
+                    mlChoice === size
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-lg shadow-purple-200'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'
+                  }`}
+                >
+                  <span className="text-sm font-black">{size}</span>
+                  <span className="text-xs opacity-80">₹{price}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Total and Confirm */}
         <div className="border-t pt-4">
@@ -167,7 +199,7 @@ const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, onConfirm, on
           </div>
           <button
             onClick={handleConfirm}
-            disabled={(item.vegType === 'BOTH' && !vegChoice) || (item.hasPortions && !portionChoice)}
+            disabled={(item.vegType === 'BOTH' && !vegChoice) || (item.hasPortions && !portionChoice) || (hasMlPrices && !mlChoice)}
             className="w-full py-4 bg-[#F57C00] hover:bg-orange-600 text-white rounded-xl font-black transition-all shadow-lg shadow-orange-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Add to Cart
@@ -346,29 +378,34 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
 
   const handleAddItem = (item: MenuItem) => {
-    // If item has both veg/non-veg options OR portions, show popup
-    if (item.vegType === 'BOTH' || item.hasPortions) {
+    // If item has both veg/non-veg options OR portions OR ML sizes, show popup
+    if (item.vegType === 'BOTH' || item.hasPortions || (item.mlPrices && Object.keys(item.mlPrices).length > 0)) {
       setOptionsItem(item);
       return;
     }
     addToCart(item);
   };
 
-  const handleItemOptions = (vegChoice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null) => {
+  const handleItemOptions = (vegChoice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null, mlChoice?: string | null) => {
     if (!optionsItem) return;
-    addToCart(optionsItem, vegChoice, portionChoice);
+    addToCart(optionsItem, vegChoice, portionChoice, mlChoice);
     setOptionsItem(null);
   };
 
-  const addToCart = (item: MenuItem, vegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice?: 'HALF' | 'FULL' | null) => {
-    // Create unique id for items with veg choice and portions
+  const addToCart = (item: MenuItem, vegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice?: 'HALF' | 'FULL' | null, mlChoice?: string | null) => {
+    // Create unique id for items with veg choice, portions, and ML size
     const choiceKey = vegChoice ? `-${vegChoice}` : '';
     const portionKey = portionChoice ? `-${portionChoice}` : '';
-    const cartItemId = `${item.id}${choiceKey}${portionKey}`;
+    const mlKey = mlChoice ? `-${mlChoice}` : '';
+    const cartItemId = `${item.id}${choiceKey}${portionKey}${mlKey}`;
     
     // Calculate item price
     let itemPrice = item.price;
-    if (vegChoice === 'VEG' && item.vegPrice) {
+    
+    // ML price takes precedence for drink items
+    if (mlChoice && item.mlPrices && item.mlPrices[mlChoice]) {
+      itemPrice = item.mlPrices[mlChoice];
+    } else if (vegChoice === 'VEG' && item.vegPrice) {
       itemPrice = item.vegPrice;
     } else if (vegChoice === 'NON_VEG' && item.nonVegPrice) {
       itemPrice = item.nonVegPrice;
@@ -389,7 +426,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       id: cartItemId, 
       price: totalItemPrice,
       selectedVegChoice: vegChoice || undefined,
-      selectedPortion: portionChoice || undefined
+      selectedPortion: portionChoice || undefined,
+      selectedMl: mlChoice || undefined
     });
 
     if (orderType === 'DINE_IN' && selectedTableId) {
@@ -553,7 +591,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           </div>
           ${order.items.map(it => `
             <div class="row">
-              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
+              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}${(it as any).selectedMl ? ` (${(it as any).selectedMl})` : ''}</span>
               <span class="qty">${it.quantity}</span>
               <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
@@ -844,10 +882,18 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm">
                     Select a table to start adding items
                   </div>
+                ) : filteredCategories.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border-2 border-dashed border-gray-300 mx-2 mt-4">
+                    <h3 className="text-lg font-black text-gray-900 mb-2">No Categories</h3>
+                    <p className="text-xs text-gray-500">
+                      Go to Configuration to add {menuType === 'DRINK' ? 'drink' : 'food'} categories or reset database.
+                    </p>
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     {filteredItems.map(item => {
-                      const itemHasOptions = item.vegType === 'BOTH' || item.hasPortions;
+                      const hasMl = item.mlPrices && Object.keys(item.mlPrices).length > 0;
+                      const itemHasOptions = item.vegType === 'BOTH' || item.hasPortions || hasMl;
                       const cartEntry = !itemHasOptions ? currentCart.find(ci => ci.id === item.id) : undefined;
                       return (
                         <div key={item.id} className="bg-white rounded-2xl border shadow-sm p-3 flex items-center gap-3">
@@ -866,7 +912,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                               </div>
                             )}
                             <div className="text-xs font-black text-gray-800 mt-1">
-                              {item.vegType === 'BOTH' ? `Veg ₹${item.vegPrice} / Non-Veg ₹${item.nonVegPrice}` : `₹${item.price}`}
+                              {hasMl
+                                ? `₹${Math.min(...(Object.values(item.mlPrices!) as number[]))} - ₹${Math.max(...(Object.values(item.mlPrices!) as number[]))}`
+                                : item.vegType === 'BOTH' ? `Veg ₹${item.vegPrice} / Non-Veg ₹${item.nonVegPrice}` : `₹${item.price}`}
                             </div>
                           </div>
 
@@ -1164,6 +1212,16 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               className="w-full bg-white border-2 border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-[#F57C00] focus:border-[#F57C00] outline-none transition-all"
             />
           </div>
+          
+        {filteredCategories.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center bg-white rounded-2xl border-2 border-dashed border-gray-300">
+            <h3 className="text-xl font-black text-gray-900 mb-2">No Categories Found</h3>
+            <p className="text-sm text-gray-500 mb-6 max-w-md">
+              There are no {menuType === 'DRINK' ? 'drink' : 'food'} categories in the database. 
+              Please go to Configuration to add them or reset the database.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
           {filteredItems.map(item => (
             <button
@@ -1181,7 +1239,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                     <div className={`w-full h-full rounded-full ${item.vegType === 'VEG' || item.isVeg ? 'bg-green-600' : 'bg-red-600'}`}></div>
                   </span>
                 )}
-                {item.vegType === 'BOTH' ? (
+                {item.mlPrices && Object.keys(item.mlPrices).length > 0 ? (
+                  <span className="text-xs font-black text-purple-600 group-hover:text-[#F57C00]">₹{Math.min(...(Object.values(item.mlPrices) as number[]))} - ₹{Math.max(...(Object.values(item.mlPrices) as number[]))}</span>
+                ) : item.vegType === 'BOTH' ? (
                   <div className="text-right">
                     <span className="text-xs font-black text-green-600">V:₹{item.vegPrice}</span>
                     <span className="text-gray-400 mx-0.5">/</span>
@@ -1200,6 +1260,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             </button>
           ))}
         </div>
+        )}
       </div>
 
       <div className="w-80 md:w-96 bg-white border-l shadow-2xl flex flex-col shrink-0 z-10">
@@ -1256,6 +1317,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                       {item.selectedVegChoice && (
                         <span className={`ml-1 text-[10px] font-black ${item.selectedVegChoice === 'VEG' ? 'text-green-600' : item.selectedVegChoice === 'SEAFOOD' ? 'text-blue-600' : 'text-red-600'}`}>
                           ({item.selectedVegChoice === 'VEG' ? 'V' : item.selectedVegChoice === 'SEAFOOD' ? 'SF' : 'NV'})
+                        </span>
+                      )}
+                      {item.selectedMl && (
+                        <span className="ml-1 text-[10px] font-black text-purple-600">
+                          ({item.selectedMl})
                         </span>
                       )}
                     </h4>

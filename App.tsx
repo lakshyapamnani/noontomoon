@@ -736,6 +736,7 @@ const App: React.FC = () => {
     if (item.vegPrice !== undefined && item.vegPrice !== null) cleanItem.vegPrice = item.vegPrice;
     if (item.nonVegPrice !== undefined && item.nonVegPrice !== null) cleanItem.nonVegPrice = item.nonVegPrice;
     if (item.image) cleanItem.image = item.image;
+    if (item.mlPrices && Object.keys(item.mlPrices).length > 0) cleanItem.mlPrices = item.mlPrices;
     
     console.log("App.tsx - Adding menu item:", cleanItem);
     try {
@@ -937,32 +938,46 @@ const App: React.FC = () => {
     const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
     const customerName = cart.customerName || 'Guest';
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      alert('Unable to create print frame.');
+      document.body.removeChild(iframe);
+      return;
+    }
 
     const html = `
       <html>
         <head>
+          <title>Running Bill - ${tableName}</title>
           <style>
-            @page { size: 3in 10in; margin: 0; }
+            @page { size: 80mm auto; margin: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
             body { 
               font-family: 'Courier New', Courier, monospace; 
-              width: 3in; 
-              margin: 0; 
-              padding: 10px; 
+              width: 76mm; 
+              max-width: 76mm;
+              margin: 0 auto; 
+              padding: 3mm; 
               font-size: 11px; 
               color: #000; 
-              line-height: 1.2;
+              line-height: 1.3;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .line { border-bottom: 1px dashed #000; margin: 8px 0; }
+            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
             .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-            .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
-            .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; }
-            .qty { width: 25px; text-align: center; }
-            .price { width: 45px; text-align: right; }
-            .total-section { font-size: 12px; margin-top: 5px; }
+            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
+            .item-name { flex: 1; min-width: 0; word-break: break-word; }
+            .qty { width: 24px; text-align: center; font-weight: bold; flex-shrink: 0; }
+            .amt { width: 40px; text-align: right; flex-shrink: 0; }
+            .total-section { font-size: 13px; font-weight: bold; margin-top: 4px; }
+            .footer { font-size: 10px; margin-top: 8px; }
           </style>
         </head>
         <body>
@@ -976,31 +991,50 @@ const App: React.FC = () => {
           <div>Date: ${new Date().toLocaleDateString()}</div>
           <div>Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
           <div class="line"></div>
-          <div class="bold item-row">
+          <div class="row bold">
             <span class="item-name">Item</span>
             <span class="qty">Qty</span>
-            <span class="price">Amt</span>
+            <span class="amt">Amt</span>
           </div>
           ${items.map(it => `
-            <div class="item-row">
+            <div class="row">
               <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
               <span class="qty">${it.quantity}</span>
-              <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
+              <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
           `).join('')}
           <div class="line"></div>
-          <div class="item-row"><span>Subtotal:</span><span>₹${subtotal.toFixed(0)}</span></div>
-          <div class="item-row"><span>Tax (${(taxRate * 100).toFixed(0)}%):</span><span>₹${taxAmount.toFixed(0)}</span></div>
-          <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${total.toFixed(0)}</span></div>
+          <div class="row"><span>Subtotal:</span><span>₹${subtotal.toFixed(0)}</span></div>
+          <div class="row"><span>Tax (${(taxRate * 100).toFixed(0)}%):</span><span>₹${taxAmount.toFixed(0)}</span></div>
+          <div class="row bold total-section"><span>TOTAL:</span><span>₹${total.toFixed(0)}</span></div>
           <div class="line"></div>
-          <div class="center" style="margin-top:8px; font-size:10px;">** Running Bill - Not Final **</div>
-          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+          <div class="center footer" style="margin-top:8px;">** Running Bill - Not Final **</div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => {
+                window.parent.postMessage('print-done', '*');
+              }, 500);
+            };
+          </script>
         </body>
       </html>
     `;
-    printWindow.document.write(html);
-    printWindow.document.close();
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'print-done') {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
   };
+
 
   const renderScreen = () => {
     switch (activeScreen) {
