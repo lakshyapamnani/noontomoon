@@ -736,6 +736,7 @@ const App: React.FC = () => {
     if (item.vegPrice !== undefined && item.vegPrice !== null) cleanItem.vegPrice = item.vegPrice;
     if (item.nonVegPrice !== undefined && item.nonVegPrice !== null) cleanItem.nonVegPrice = item.nonVegPrice;
     if (item.image) cleanItem.image = item.image;
+    if (item.mlPrices && Object.keys(item.mlPrices).length > 0) cleanItem.mlPrices = item.mlPrices;
     
     console.log("App.tsx - Adding menu item:", cleanItem);
     try {

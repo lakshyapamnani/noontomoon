@@ -34,6 +34,15 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat24', name: 'Oriental Veg Starters' },
   { id: 'cat25', name: 'Tandoori Khazana Veg' },
   { id: 'cat26', name: 'Tandoori Khazana Non-Veg' },
+  // Drink Categories
+  { id: 'dcat1', name: 'Whisky - Indian Premium', type: 'DRINK' as const },
+  { id: 'dcat2', name: 'Whisky - Imported Scotch', type: 'DRINK' as const },
+  { id: 'dcat3', name: 'Vodka', type: 'DRINK' as const },
+  { id: 'dcat4', name: 'Rum', type: 'DRINK' as const },
+  { id: 'dcat5', name: 'Beer', type: 'DRINK' as const },
+  { id: 'dcat6', name: 'Mocktails', type: 'DRINK' as const },
+  { id: 'dcat7', name: 'Cocktails', type: 'DRINK' as const },
+  { id: 'dcat8', name: 'Zero Alcohol', type: 'DRINK' as const },
 ];
 
 export const INITIAL_MENU_ITEMS: MenuItem[] = [
@@ -290,6 +299,114 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
   { id: 'tknv18', name: 'Liver Petha Oil Fry', price: 220, categoryId: 'cat26', isVeg: false, vegType: 'NON_VEG' },
   { id: 'tknv19', name: 'Liver Petha Lapeta', price: 265, categoryId: 'cat26', isVeg: false, vegType: 'NON_VEG' },
   { id: 'tknv20', name: 'Chicken Tangdi Kabab', price: 420, categoryId: 'cat26', isVeg: false, vegType: 'NON_VEG' },
+
+  // ========== DRINKS ==========
+
+  // Whisky - Indian Premium (dcat1)
+  { id: 'wip1', name: 'DSP Black', price: 290, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1160, '180ml': 290, '90ml': 150, '60ml': 100, '30ml': 50 } },
+  { id: 'wip2', name: 'Imperial Blue', price: 310, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1240, '180ml': 310, '90ml': 155, '60ml': 105, '30ml': 55 } },
+  { id: 'wip3', name: 'MCD No.1', price: 310, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1240, '180ml': 310, '90ml': 155, '60ml': 105, '30ml': 55 } },
+  { id: 'wip4', name: 'Sterling Reserves B7', price: 280, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1100, '180ml': 280, '90ml': 140, '60ml': 95, '30ml': 50 } },
+  { id: 'wip5', name: 'Royal Challenges', price: 380, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1500, '180ml': 380, '90ml': 180, '60ml': 120, '30ml': 60 } },
+  { id: 'wip6', name: 'Royal Stag', price: 360, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1500, '180ml': 360, '90ml': 175, '60ml': 120, '30ml': 60 } },
+  { id: 'wip7', name: 'Oaksmith International', price: 460, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1920, '180ml': 460, '90ml': 230, '60ml': 155, '30ml': 80 } },
+  { id: 'wip8', name: 'Royal Stag Barrel', price: 440, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1760, '180ml': 440, '90ml': 220, '60ml': 145, '30ml': 70 } },
+  { id: 'wip9', name: 'Signature', price: 530, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2050, '180ml': 530, '90ml': 265, '60ml': 175, '30ml': 90 } },
+  { id: 'wip10', name: 'Signature Reserve', price: 540, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2120, '180ml': 540, '90ml': 270, '60ml': 190, '30ml': 100 } },
+  { id: 'wip11', name: 'Blenders Pride', price: 530, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2050, '180ml': 530, '90ml': 265, '60ml': 175, '30ml': 90 } },
+  { id: 'wip12', name: 'Oaksmith Gold', price: 560, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2240, '180ml': 560, '90ml': 280, '60ml': 190, '30ml': 95 } },
+  { id: 'wip13', name: 'Antiquity Blue', price: 560, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2240, '180ml': 560, '90ml': 280, '60ml': 190, '30ml': 95 } },
+  { id: 'wip14', name: 'Blenders Pride Reserve', price: 620, categoryId: 'dcat1', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2480, '180ml': 620, '90ml': 310, '60ml': 210, '30ml': 105 } },
+
+  // Whisky - Imported Scotch (dcat2)
+  { id: 'wis1', name: 'Johnny Walker Red Label', price: 875, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 3500, '180ml': 875 } },
+  { id: 'wis2', name: 'Ballentine', price: 900, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 3600, '180ml': 900 } },
+  { id: 'wis3', name: 'Black & White', price: 1000, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 4000, '180ml': 1000 } },
+  { id: 'wis4', name: '100 Pipers', price: 930, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 3700, '180ml': 930 } },
+  { id: 'wis5', name: 'VAT 69', price: 930, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 3700, '180ml': 930 } },
+  { id: 'wis6', name: 'Teachers', price: 1110, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 4400, '180ml': 1110 } },
+  { id: 'wis7', name: 'Black Gold Dog', price: 1110, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 4400, '180ml': 1110 } },
+  { id: 'wis8', name: 'Black Dog', price: 1000, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 4000, '180ml': 1000 } },
+  { id: 'wis9', name: 'Johnny Walker Black Label', price: 1500, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 6000, '180ml': 1500 } },
+  { id: 'wis10', name: 'Chivas Regal', price: 1480, categoryId: 'dcat2', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 5900, '180ml': 1480 } },
+
+  // Vodka (dcat3)
+  { id: 'vod1', name: 'Romanov', price: 310, categoryId: 'dcat3', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1240, '180ml': 310, '90ml': 155, '60ml': 105, '30ml': 55 } },
+  { id: 'vod2', name: 'Romanov Apple', price: 310, categoryId: 'dcat3', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1240, '180ml': 310, '90ml': 155, '60ml': 105, '30ml': 55 } },
+  { id: 'vod3', name: 'Magic Movement', price: 380, categoryId: 'dcat3', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1500, '180ml': 380, '90ml': 190, '60ml': 130, '30ml': 65 } },
+  { id: 'vod4', name: 'Magic Movement Apple', price: 380, categoryId: 'dcat3', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1500, '180ml': 380, '90ml': 190, '60ml': 130, '30ml': 65 } },
+  { id: 'vod5', name: 'Smirnoff', price: 620, categoryId: 'dcat3', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2480, '180ml': 620, '90ml': 310, '60ml': 205, '30ml': 105 } },
+  { id: 'vod6', name: 'Smirnoff Apple', price: 640, categoryId: 'dcat3', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2500, '180ml': 640, '90ml': 320, '60ml': 210, '30ml': 110 } },
+
+  // Rum (dcat4)
+  { id: 'rum1', name: 'Old Monk', price: 300, categoryId: 'dcat4', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 1200, '180ml': 300, '90ml': 150, '60ml': 100, '30ml': 55 } },
+  { id: 'rum2', name: 'Bacardi White', price: 550, categoryId: 'dcat4', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2200, '180ml': 550, '90ml': 275, '60ml': 185, '30ml': 95 } },
+  { id: 'rum3', name: 'Bacardi Lemon', price: 610, categoryId: 'dcat4', isVeg: true, vegType: 'VEG', mlPrices: { '750ml': 2450, '180ml': 610, '90ml': 305, '60ml': 205, '30ml': 105 } },
+  { id: 'rum4', name: 'Sula Red Wine', price: 375, categoryId: 'dcat4', isVeg: true, vegType: 'VEG', mlPrices: { 'Full Bottle': 1450, '180ml': 375 } },
+  { id: 'rum5', name: 'Sula White Wine', price: 300, categoryId: 'dcat4', isVeg: true, vegType: 'VEG', mlPrices: { 'Full Bottle': 1100, '180ml': 300 } },
+
+  // Beer (dcat5)
+  { id: 'beer1', name: 'King Fisher Strong', price: 289, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer2', name: 'King Fisher Mild', price: 299, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer3', name: 'KF Strong Tin 500ml', price: 239, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer4', name: 'KF Mild Tin 500ml', price: 239, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer5', name: 'King Fisher Ultra', price: 319, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer6', name: 'Budweiser Magnum Strong', price: 349, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer7', name: 'Budweiser Mild', price: 319, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer8', name: 'Carlsberg Strong', price: 349, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer9', name: 'Carlsberg Mild', price: 319, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer10', name: 'Tuborg Strong', price: 289, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer11', name: 'Tuborg Mild', price: 299, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer12', name: 'Tuborg Strong Tin 330ml', price: 229, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer13', name: 'Heineken Silver', price: 349, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer14', name: 'Budweiser Tin', price: 259, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer15', name: 'Budweiser Magnum Tin', price: 269, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer16', name: 'Bira Boom', price: 289, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer17', name: 'Bira White', price: 329, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+  { id: 'beer18', name: 'Bacardi Breezer', price: 210, categoryId: 'dcat5', isVeg: true, vegType: 'VEG' },
+
+  // Mocktails (dcat6)
+  { id: 'mock1', name: 'Virgin Colada', price: 270, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock2', name: 'Fruit Punch', price: 270, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock3', name: 'May Queen', price: 270, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock4', name: 'Virgin Mojito', price: 260, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock5', name: 'Guava Marry', price: 270, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock6', name: 'Blue Moon', price: 240, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock7', name: 'Pink Lady', price: 240, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock8', name: 'Green Sea', price: 240, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock9', name: 'Strawberry WOHO', price: 240, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock10', name: 'Green COCO', price: 240, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock11', name: 'Litchi Colada', price: 260, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+  { id: 'mock12', name: 'Sangria Red', price: 270, categoryId: 'dcat6', isVeg: true, vegType: 'VEG' },
+
+  // Cocktails (dcat7)
+  { id: 'cock1', name: 'Kamikaze', price: 320, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock2', name: 'B-52', price: 320, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock3', name: 'Kahlua, Bailey & Contrau', price: 320, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock4', name: 'Roulette', price: 320, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock5', name: 'White Or Black Russian', price: 415, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock6', name: 'Cosmopolitan', price: 350, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock7', name: 'Daiquiri', price: 340, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock8', name: 'Mojito', price: 350, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock9', name: 'Pina Colada', price: 380, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock10', name: 'Pomegranate Basil Martini', price: 380, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock11', name: 'Hi Hop', price: 350, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock12', name: 'Sangria Red & White', price: 410, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock13', name: 'Whisky Sour', price: 340, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock14', name: 'Tom Collins', price: 330, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock15', name: 'Margarita', price: 370, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock16', name: 'Classic Martini', price: 360, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock17', name: 'Old Monk Cocktail', price: 370, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock18', name: 'Tequila Sunrise', price: 360, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+  { id: 'cock19', name: 'Chatoha', price: 340, categoryId: 'dcat7', isVeg: true, vegType: 'VEG' },
+
+  // Zero Alcohol (dcat8)
+  { id: 'za1', name: 'Red Bull', price: 190, categoryId: 'dcat8', isVeg: true, vegType: 'VEG' },
+  { id: 'za2', name: 'Bottled Water', price: 30, categoryId: 'dcat8', isVeg: true, vegType: 'VEG' },
+  { id: 'za3', name: 'Fresh Lime Water', price: 60, categoryId: 'dcat8', isVeg: true, vegType: 'VEG' },
+  { id: 'za4', name: 'Fresh Lime Soda', price: 70, categoryId: 'dcat8', isVeg: true, vegType: 'VEG' },
+  { id: 'za5', name: 'Canned Juice', price: 120, categoryId: 'dcat8', isVeg: true, vegType: 'VEG' },
+  { id: 'za6', name: 'Jal Jeera', price: 80, categoryId: 'dcat8', isVeg: true, vegType: 'VEG' },
 
 ];
 
