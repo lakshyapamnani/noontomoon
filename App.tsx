@@ -156,6 +156,12 @@ const App: React.FC = () => {
     }, {});
   };
 
+  const sortTables = (tableArray: Table[]) => {
+    return [...tableArray].sort((a, b) => 
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  };
+
   const normalizeTableCarts = (value: unknown): Record<string, { items: any[]; customerName: string }> => {
     if (!value || typeof value !== 'object') return {};
     const raw = value as Record<string, any>;
@@ -478,8 +484,9 @@ const App: React.FC = () => {
       const data = snapshot.val();
       if (data) {
         const tableArray = Object.values(data) as Table[];
-        setTables(tableArray);
-        localStorage.setItem('drona_tables', JSON.stringify(tableArray));
+        const sortedTables = sortTables(tableArray);
+        setTables(sortedTables);
+        localStorage.setItem('drona_tables', JSON.stringify(sortedTables));
       } else {
         const saved = localStorage.getItem('drona_tables');
         if (saved) {
@@ -623,7 +630,7 @@ const App: React.FC = () => {
       ...(floorId ? { floorId } : {}),
     };
 
-    const updatedTables = [...tables, newTable];
+    const updatedTables = sortTables([...tables, newTable]);
     setTables(updatedTables);
     localStorage.setItem('drona_tables', JSON.stringify(updatedTables));
 
@@ -635,7 +642,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTable = async (updated: Table) => {
-    const updatedTables = tables.map(t => (t.id === updated.id ? updated : t));
+    const updatedTables = sortTables(tables.map(t => (t.id === updated.id ? updated : t)));
     setTables(updatedTables);
     localStorage.setItem('drona_tables', JSON.stringify(updatedTables));
     const clean: Record<string, unknown> = {
