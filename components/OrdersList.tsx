@@ -132,15 +132,19 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       <html>
         <head>
           <style>
-            @page { size: 3in 10in; margin: 0; }
+            @page { size: 80mm auto; margin: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
             body { 
               font-family: 'Courier New', Courier, monospace; 
-              width: 3in; 
-              margin: 0; 
-              padding: 10px; 
+              width: 76mm; 
+              max-width: 76mm;
+              margin: 0 auto; 
+              padding: 3mm; 
               font-size: 11px; 
               color: #000; 
-              line-height: 1.2;
+              line-height: 1.3;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
@@ -416,16 +420,19 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
         <head>
           <title>KOT Summary - ${subTitle}</title>
           <style>
-            @page { size: 3in auto; margin: 0; }
+            @page { size: 80mm auto; margin: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
             body {
               font-family: 'Courier New', Courier, monospace;
-              width: 3in;
-              max-width: 3in;
+              width: 76mm;
+              max-width: 76mm;
               margin: 0 auto;
-              padding: 10px;
+              padding: 3mm;
               font-size: 11px;
               color: #000;
-              line-height: 1.2;
+              line-height: 1.3;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
