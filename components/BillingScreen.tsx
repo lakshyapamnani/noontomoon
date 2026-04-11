@@ -19,7 +19,9 @@ import {
   ArrowLeft,
   ChevronUp,
   X,
-  Search
+  Search,
+  ChefHat,
+  Printer
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor } from '../types';
@@ -548,14 +550,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             @page { size: 80mm auto; margin: 0; }
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body {
-              font-family: 'Courier New', Courier, monospace;
+              font-family: Arial, sans-serif;
               width: 76mm;
               max-width: 76mm;
               margin: 0 auto;
               padding: 3mm;
-              font-size: 11px;
+              font-size: 13px;
               color: #000;
-              line-height: 1.3;
+              line-height: 1.4;
+              font-weight: bold;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
@@ -634,6 +637,112 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     window.addEventListener('message', handleMessage);
     
     // Fallback cleanup if message fails
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 5000);
+  };
+
+  const printKOT = async () => {
+    if (currentCart.length === 0) {
+      alert("Please add items to the cart first.");
+      return;
+    }
+
+    const selectedTable = tables.find(t => t.id === selectedTableId);
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      alert('Unable to create print frame.');
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    const html = `
+      <html>
+        <head>
+          <title>KOT - ${selectedTable?.name || 'Takeaway'}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { 
+              font-family: Arial, sans-serif; 
+              width: 76mm; 
+              max-width: 76mm;
+              margin: 0 auto; 
+              padding: 3mm; 
+              font-size: 14px; 
+              color: #000; 
+              line-height: 1.3;
+              font-weight: bold;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-bottom: 2px dashed #000; margin: 8px 0; }
+            .header { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
+            .table-info { font-size: 20px; font-weight: bold; margin: 10px 0; }
+            .item-row { display: flex; justify-content: space-between; margin: 6px 0; border-bottom: 1px dotted #ccc; padding-bottom: 4px; }
+            .item-name { flex: 1; word-break: break-word; }
+            .qty { width: 40px; text-align: right; font-weight: bold; font-size: 20px; }
+            .footer { margin-top: 15px; font-size: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="center header">K. O. T.</div>
+          <div class="line"></div>
+          <div class="table-info center uppercase">TABLE: ${selectedTable?.name || 'TAKEAWAY'}</div>
+          ${customerName ? `<div class="center bold">Cust: ${customerName}</div>` : ''}
+          <div class="center">Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          <div class="line"></div>
+          <div class="bold item-row">
+            <span class="item-name">ITEM</span>
+            <span class="qty">QTY</span>
+          </div>
+          ${currentCart.map(it => `
+            <div class="item-row">
+              <span class="item-name">
+                <span class="bold">${it.name.toUpperCase()}</span>
+                ${it.selectedPortion ? `<br/>&nbsp;&nbsp;(${it.selectedPortion === 'HALF' ? 'HALF' : 'FULL'})` : ''}
+                ${it.selectedVegChoice ? `<br/>&nbsp;&nbsp;(${it.selectedVegChoice})` : ''}
+                ${(it as any).selectedMl ? `<br/>&nbsp;&nbsp;(${(it as any).selectedMl})` : ''}
+              </span>
+              <span class="qty">${it.quantity}</span>
+            </div>
+          `).join('')}
+          <div class="line"></div>
+          <div class="center footer">
+             Printed at ${new Date().toLocaleString()}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => {
+                window.parent.postMessage('print-done', '*');
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'print-done') {
+        document.body.removeChild(iframe);
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    
     setTimeout(() => {
       if (document.body.contains(iframe)) {
         document.body.removeChild(iframe);
@@ -985,12 +1094,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                         <div className="text-sm font-bold text-gray-900 truncate">{item.name}</div>
                         <div className="text-[11px] text-gray-500 font-medium">₹{item.price} each</div>
                       </div>
-                      <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1">
-                        <button onClick={() => updateQuantity(item.id, -1)} className="text-gray-500">
+                      <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1 shadow-sm">
+                        <button onClick={() => updateQuantity(item.id, -1)} className="text-gray-400">
                           <Minus size={14} />
                         </button>
-                        <span className="w-6 text-center font-black text-sm">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, 1)} className="text-gray-500">
+                        <span className="w-6 text-center font-black text-sm text-gray-900">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.id, 1)} className="text-gray-400">
                           <Plus size={14} />
                         </button>
                       </div>
@@ -1019,6 +1128,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                       <span className="text-[#F57C00]">₹{total.toFixed(0)}</span>
                     </div>
                   </div>
+
+                  {currentCart.length > 0 && (
+                    <button
+                      onClick={() => printKOT()}
+                      className="w-full mt-4 flex items-center justify-center gap-2 bg-black text-white py-4 rounded-xl font-black transition-all shadow-lg active:scale-95"
+                    >
+                      <ChefHat size={20} /> PRINT KOT
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1373,7 +1491,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             <PaymentTab active={paymentMode === 'UPI'} onClick={() => setPaymentMode('UPI')} icon={<Smartphone size={18} />} label="UPI" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => printKOT()}
+              className="flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-100"
+            >
+              <ChefHat size={20} /> Print KOT (Kitchen)
+            </button>
+            <div className="grid grid-cols-2 gap-3">
             <button 
               onClick={() => handlePlaceOrder(false)}
               className="flex items-center justify-center gap-2 bg-[#262626] text-white py-4 rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-200"
@@ -1388,6 +1513,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             </button>
           </div>
         </div>
+      </div>
       </div>
       </div>
     </div>
