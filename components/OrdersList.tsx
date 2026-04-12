@@ -135,7 +135,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             @page { size: 80mm auto; margin: 0; }
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { 
-              font-family: 'Courier New', Courier, monospace; 
+              font-family: Arial, sans-serif; 
               width: 76mm; 
               max-width: 76mm;
               margin: 0 auto; 
@@ -143,12 +143,13 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
               font-size: 11px; 
               color: #000; 
               line-height: 1.3;
+              font-weight: bold;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .line { border-bottom: 1px dashed #000; margin: 8px 0; }
+            .line { border-bottom: 2px dashed #000; margin: 8px 0; }
             .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
             .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
             .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; }
@@ -423,7 +424,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             @page { size: 80mm auto; margin: 0; }
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body {
-              font-family: 'Courier New', Courier, monospace;
+              font-family: Arial, sans-serif;
               width: 76mm;
               max-width: 76mm;
               margin: 0 auto;
@@ -431,12 +432,13 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
               font-size: 11px;
               color: #000;
               line-height: 1.3;
+              font-weight: bold;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .line { border-bottom: 2px dashed #000; margin: 6px 0; }
             .header-name { font-size: 11px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
             .sub { font-size: 9px; }
             .cat-title { font-size: 10px; font-weight: bold; margin-top: 6px; }

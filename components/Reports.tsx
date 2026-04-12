@@ -204,17 +204,17 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
         <head>
           <title>NOON TO MOON POS - Sales Report</title>
           <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #000; font-weight: bold; }
             .header { text-align: center; border-bottom: 2px solid #F57C00; padding-bottom: 20px; margin-bottom: 30px; }
             h1 { color: #F57C00; margin: 0; font-size: 28px; }
-            .meta { font-size: 14px; color: #666; margin-top: 5px; }
+            .meta { font-size: 14px; color: #000; margin-top: 5px; }
             .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }
             .summary-card { padding: 20px; border: 1px solid #eee; border-radius: 10px; text-align: center; }
-            .summary-label { font-size: 12px; color: #666; text-transform: uppercase; font-weight: bold; }
+            .summary-label { font-size: 12px; color: #000; text-transform: uppercase; font-weight: bold; }
             .summary-value { font-size: 24px; color: #F57C00; font-weight: bold; margin-top: 10px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
-            th { background-color: #fafafa; font-weight: bold; text-transform: uppercase; color: #555; }
+            th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; color: #000; }
+            th { background-color: #fafafa; font-weight: bold; text-transform: uppercase; color: #000; }
           </style>
         </head>
         <body>

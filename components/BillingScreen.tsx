@@ -247,7 +247,7 @@ interface BillingScreenProps {
   tables: Table[];
   floors?: Floor[];
   tableCarts: Record<string, TableCart>;
-  onCreateOrder: (order: Order) => void;
+  onCreateOrder: (order: Order) => Promise<void>;
   onUpdateTableStatus: (tableId: string, status: Table['status'], currentOrderId?: string) => void;
   onUpdateTableCarts: (tableCarts: Record<string, TableCart>) => void;
   selectedTableId?: string | null;
@@ -564,13 +564,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .line { border-bottom: 2px dashed #000; margin: 6px 0; }
             .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
             .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
             .item-name { flex: 1; min-width: 0; word-break: break-word; }
             .qty { width: 24px; text-align: center; font-weight: bold; flex-shrink: 0; }
             .amt { width: 40px; text-align: right; flex-shrink: 0; }
-            .addon-row { font-size: 9px; color: #555; padding-left: 8px; margin: 1px 0; }
+            .addon-row { font-size: 9px; color: #000; padding-left: 8px; margin: 1px 0; }
             .total-section { font-size: 13px; font-weight: bold; margin-top: 4px; }
             .footer { font-size: 10px; margin-top: 8px; }
           </style>
@@ -688,7 +688,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             .line { border-bottom: 2px dashed #000; margin: 8px 0; }
             .header { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
             .table-info { font-size: 20px; font-weight: bold; margin: 10px 0; }
-            .item-row { display: flex; justify-content: space-between; margin: 6px 0; border-bottom: 1px dotted #ccc; padding-bottom: 4px; }
+            .item-row { display: flex; justify-content: space-between; margin: 6px 0; border-bottom: 1px dashed #000; padding-bottom: 4px; }
             .item-name { flex: 1; word-break: break-word; }
             .qty { width: 40px; text-align: right; font-weight: bold; font-size: 20px; }
             .footer { margin-top: 15px; font-size: 10px; }
@@ -751,7 +751,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
 
-  const handlePlaceOrder = (print = false) => {
+  const handlePlaceOrder = async (print = false) => {
     const selectedTableItems = selectedTableId
       ? toCartItemsArray(tableCarts[selectedTableId]?.items)
       : [];
@@ -805,13 +805,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       status: 'COMPLETED'
     };
 
-    if (print) {
-      void printReceipt(newOrder);
-      return;
-    }
-
     console.log("Placing order:", newOrder);
-    onCreateOrder(newOrder);
+    await onCreateOrder(newOrder);
+    console.log("onCreateOrder completed, real billNo:", newOrder.billNo);
+
+    if (print) {
+      await printReceipt(newOrder);
+    }
     console.log("onCreateOrder called");
     
     const selectedTableHasPendingItems =
