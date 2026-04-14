@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Save, X, Utensils, Tag, Store, Percent, LayoutGrid, RefreshCw, Database, Package } from 'lucide-react';
-import { MenuItem, Category, RestaurantInfo, Table, VegType, Floor } from '../types';
+import { Plus, Edit2, Trash2, Search, Save, X, Utensils, Tag, Store, Percent, LayoutGrid, RefreshCw, Database, Package, Printer, Wifi, WifiOff, Zap } from 'lucide-react';
+import { MenuItem, Category, RestaurantInfo, Table, VegType, Floor, PrinterSettings, ActivePrinterConnection } from '../types';
+import { connectPrinter, disconnectPrinter, getConnectedPrinter, isWebSerialSupported, isWebUSBSupported, printEscPos, buildBillLines, buildKOTLines } from './printer';
 
 interface MenuManagementProps {
   categories: Category[];
@@ -26,6 +27,8 @@ interface MenuManagementProps {
   onDeleteFloor: (id: string) => void;
   onResetMenuDatabase?: () => void;
   onFactoryReset?: () => void;
+  printerSettings?: PrinterSettings;
+  onSavePrinterSettings?: (settings: PrinterSettings) => void;
 }
 
 const MenuManagement: React.FC<MenuManagementProps> = ({ 
@@ -51,9 +54,11 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   onAddFloor,
   onDeleteFloor,
   onResetMenuDatabase,
-  onFactoryReset
+  onFactoryReset,
+  printerSettings: printerSettingsProp,
+  onSavePrinterSettings,
 }) => {
-  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
+  const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE' | 'PRINTERS'>('ITEMS');
   const [searchTerm, setSearchTerm] = useState('');
   const [newTableName, setNewTableName] = useState('');
   const [newTableFloorId, setNewTableFloorId] = useState('');
@@ -76,6 +81,107 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   const [itemHasPortions, setItemHasPortions] = useState(false);
 
   const [localRestaurantInfo, setLocalRestaurantInfo] = useState<RestaurantInfo>(restaurantInfo);
+
+  // Printer settings local state
+  const [localPrinterSettings, setLocalPrinterSettings] = useState<PrinterSettings>(
+    printerSettingsProp ?? { 
+      printerWidth: 80, 
+      useSamePrinter: false, 
+      billPrinter: { type: 'serial' }, 
+      kotPrinter: { type: 'serial' } 
+    }
+  );
+  const [billPrinterActive, setBillPrinterActive] = useState<any>(() => getConnectedPrinter('bill'));
+  const [kotPrinterActive, setKotPrinterActive] = useState<any>(() => getConnectedPrinter('kot'));
+  const [printerConnecting, setPrinterConnecting] = useState<'bill' | 'kot' | null>(null);
+  const [testPrinting, setTestPrinting] = useState<'bill' | 'kot' | null>(null);
+
+  const handleConnectPrinter = async (purpose: 'bill' | 'kot') => {
+    const config = purpose === 'bill' 
+      ? (localPrinterSettings.billPrinter || { type: 'serial' }) 
+      : (localPrinterSettings.kotPrinter || { type: 'serial' });
+
+    if (config.type === 'serial' && !isWebSerialSupported()) {
+      alert('Web Serial is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+    if (config.type === 'usb' && !isWebUSBSupported()) {
+      alert('WebUSB is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+    if (config.type === 'network' && !config.ipAddress) {
+      alert('Please enter a valid IP address for the printer.');
+      return;
+    }
+
+    setPrinterConnecting(purpose);
+    try {
+      const conn = await connectPrinter(purpose, config as any, localPrinterSettings.useSamePrinter ?? false);
+      if (purpose === 'bill' || localPrinterSettings.useSamePrinter) {
+        setBillPrinterActive(conn);
+      }
+      if (purpose === 'kot' || localPrinterSettings.useSamePrinter) {
+        setKotPrinterActive(conn);
+      }
+    } catch (err: any) {
+      alert(`Failed to connect: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setPrinterConnecting(null);
+    }
+  };
+
+  const handleDisconnectPrinter = async (purpose: 'bill' | 'kot') => {
+    await disconnectPrinter(purpose);
+    if (purpose === 'bill') setBillPrinterActive(null);
+    if (purpose === 'kot') setKotPrinterActive(null);
+  };
+
+  const handleTestPrint = async (purpose: 'bill' | 'kot') => {
+    setTestPrinting(purpose);
+    const widthMm = (localPrinterSettings.printerWidth ?? 80) as 80 | 58;
+    const testBillLines = buildBillLines({
+      restaurantName: restaurantInfo.name || 'Restaurant',
+      address: restaurantInfo.address || 'Address',
+      phone: restaurantInfo.phone || 'Phone',
+      gstNo: restaurantInfo.gstNo,
+      billNo: 'TEST-001',
+      customerName: 'Test Customer',
+      date: new Date().toLocaleDateString(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      orderType: 'DINE IN',
+      tableName: 'T-1',
+      items: [
+        { name: 'Test Item 1', quantity: 2, price: 150 },
+        { name: 'Test Item 2', quantity: 1, price: 200 },
+      ],
+      subtotal: 500,
+      gst: 0,
+      vat: 0,
+      tax: 0,
+      total: 500,
+      paymentMode: 'CASH',
+    });
+    const testKOTLines = buildKOTLines({
+      tableName: 'T-1',
+      customerName: 'Test',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      items: [
+        { name: 'Test Item 1', quantity: 2 },
+        { name: 'Test Item 2', quantity: 1 },
+      ],
+    });
+    const actualPurpose = purpose === 'kot' && localPrinterSettings.useSamePrinter ? 'bill' : purpose;
+    const sent = await printEscPos(actualPurpose, purpose === 'bill' ? testBillLines : testKOTLines, widthMm);
+    if (!sent) {
+      alert(`Print failed. If Network printer, verify IP. If Serial/USB, ensure printer is connected and turned on.`);
+    }
+    setTestPrinting(null);
+  };
+
+  const handleSavePrinterConfig = () => {
+    onSavePrinterSettings?.(localPrinterSettings);
+    alert('Printer settings saved!');
+  };
 
   const filteredItems = menuItems.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -143,6 +249,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           <TabItem label="Tables" active={activeTab === 'TABLES'} onClick={() => setActiveTab('TABLES')} icon={<LayoutGrid size={18} />} />
           <TabItem label="Taxes & Charges" active={activeTab === 'TAXES'} onClick={() => setActiveTab('TAXES')} icon={<Percent size={18} />} />
           <TabItem label="Restaurant Profile" active={activeTab === 'RESTAURANT'} onClick={() => setActiveTab('RESTAURANT')} icon={<Store size={18} />} />
+          <TabItem label="Printer Settings" active={activeTab === 'PRINTERS'} onClick={() => setActiveTab('PRINTERS')} icon={<Printer size={18} />} />
           <TabItem label="Database" active={activeTab === 'DATABASE'} onClick={() => setActiveTab('DATABASE')} icon={<Database size={18} />} />
         </div>
 
@@ -534,6 +641,248 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                    </button>
                    <p className="text-xs text-gray-800 text-center font-black uppercase">These details appear on your printed receipts.</p>
                  </form>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'PRINTERS' && (
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <div className="max-w-2xl mx-auto space-y-6 pb-8">
+
+                {/* Paper Width */}
+                <div className="p-6 border-2 border-gray-200 rounded-2xl bg-white shadow-sm">
+                  <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2"><Printer size={20} className="text-[#F57C00]" /> Paper & Print Settings</h3>
+                  <div>
+                    <label className="block text-sm font-black text-gray-700 mb-3 uppercase tracking-wider">Paper Width</label>
+                    <div className="flex gap-3">
+                      {([80, 58] as const).map(w => (
+                        <button
+                          key={w}
+                          onClick={() => setLocalPrinterSettings(s => ({ ...s, printerWidth: w }))}
+                          className={`flex-1 py-3 px-4 rounded-xl border-2 font-black text-sm transition-all ${
+                            localPrinterSettings.printerWidth === w
+                              ? 'bg-[#F57C00] text-white border-[#F57C00] shadow-lg shadow-orange-200'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-[#F57C00]'
+                          }`}
+                        >
+                          {w}mm
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bill Printer */}
+                <div className="p-6 border-2 border-blue-200 rounded-2xl bg-blue-50/40 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                      <div className="p-2 bg-blue-100 rounded-xl"><Printer size={18} className="text-blue-600" /></div>
+                      Bill Printer
+                    </h3>
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-black border ${
+                      billPrinterActive
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-gray-50 text-gray-500 border-gray-200'
+                    }`}>
+                      {billPrinterActive ? <Wifi size={12} /> : <WifiOff size={12} />}
+                      {billPrinterActive ? 'Connected / Configured' : 'Not Configured'}
+                    </div>
+                  </div>
+
+                  {!billPrinterActive && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-black text-gray-700 mb-2">Connection Type</label>
+                      <select 
+                        className="w-full p-3 rounded-xl border border-blue-300 font-bold text-gray-800 focus:ring-2 ring-blue-500"
+                        value={localPrinterSettings.billPrinter?.type || 'serial'}
+                        onChange={(e) => setLocalPrinterSettings(s => ({ ...s, billPrinter: { ...(s.billPrinter || {}), type: e.target.value as any } }))}
+                      >
+                        <option value="serial">Serial Port (COM / Virtual USB)</option>
+                        <option value="usb">Direct USB (WebUSB)</option>
+                        <option value="network">Network / IP (WiFi / LAN)</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {!billPrinterActive && localPrinterSettings.billPrinter?.type === 'network' && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-black text-gray-700 mb-2">Printer IP Address</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. 192.168.1.100" 
+                        className="w-full p-3 rounded-xl border border-blue-300 font-bold focus:ring-2 ring-blue-500"
+                        value={localPrinterSettings.billPrinter.ipAddress || ''}
+                        onChange={(e) => setLocalPrinterSettings(s => ({ ...s, billPrinter: { ...s.billPrinter!, ipAddress: e.target.value } }))}
+                      />
+                    </div>
+                  )}
+
+                  {billPrinterActive && (
+                    <div className="mb-4 p-3 bg-white rounded-xl border text-sm font-bold text-gray-600">
+                      🖨️ {billPrinterActive.label}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    {billPrinterActive ? (
+                      <button
+                        onClick={() => handleDisconnectPrinter('bill')}
+                        className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-black text-sm border-2 border-gray-300 hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                      >
+                        <WifiOff size={16} /> Disconnect / Clear
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleConnectPrinter('bill')}
+                        disabled={printerConnecting === 'bill'}
+                        className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60 shadow-lg shadow-blue-100"
+                      >
+                        {printerConnecting === 'bill' ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Wifi size={16} />
+                        )}
+                        {printerConnecting === 'bill' ? 'Processing...' : localPrinterSettings.billPrinter?.type === 'network' ? 'Save & Use IP' : 'Select Printer'}
+                      </button>
+                    )}
+                    {billPrinterActive && (
+                      <button
+                        onClick={() => handleTestPrint('bill')}
+                        disabled={testPrinting === 'bill'}
+                        className="py-3 px-4 bg-white text-blue-600 rounded-xl font-black text-sm border-2 border-blue-300 hover:bg-blue-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                      >
+                        {testPrinting === 'bill' ? <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> : <Zap size={16} />}
+                        Test Print
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Same printer toggle */}
+                <div className="p-4 border-2 border-gray-200 rounded-2xl bg-white shadow-sm">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div
+                      onClick={() => setLocalPrinterSettings(s => ({ ...s, useSamePrinter: !s.useSamePrinter }))}
+                      className={`relative w-12 h-6 rounded-full transition-colors cursor-pointer ${
+                        localPrinterSettings.useSamePrinter ? 'bg-[#F57C00]' : 'bg-gray-300'
+                      }`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                        localPrinterSettings.useSamePrinter ? 'translate-x-7' : 'translate-x-1'
+                      }`} />
+                    </div>
+                    <div>
+                      <p className="font-black text-gray-900 text-sm">Use same printer for Bill & KOT</p>
+                      <p className="text-xs text-gray-500 mt-0.5">When enabled, KOT will print on the Bill printer</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* KOT Printer */}
+                {!localPrinterSettings.useSamePrinter && (
+                  <div className="p-6 border-2 border-orange-200 rounded-2xl bg-orange-50/40 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                        <div className="p-2 bg-orange-100 rounded-xl"><Printer size={18} className="text-[#F57C00]" /></div>
+                        KOT Printer
+                      </h3>
+                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-black border ${
+                        kotPrinterActive
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-gray-50 text-gray-500 border-gray-200'
+                      }`}>
+                        {kotPrinterActive ? <Wifi size={12} /> : <WifiOff size={12} />}
+                        {kotPrinterActive ? 'Connected / Configured' : 'Not Configured'}
+                      </div>
+                    </div>
+
+                    {!kotPrinterActive && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-black text-gray-700 mb-2">Connection Type</label>
+                        <select 
+                          className="w-full p-3 rounded-xl border border-orange-300 font-bold text-gray-800 focus:ring-2 ring-orange-500"
+                          value={localPrinterSettings.kotPrinter?.type || 'serial'}
+                          onChange={(e) => setLocalPrinterSettings(s => ({ ...s, kotPrinter: { ...(s.kotPrinter || {}), type: e.target.value as any } }))}
+                        >
+                          <option value="serial">Serial Port (COM / Virtual USB)</option>
+                          <option value="usb">Direct USB (WebUSB)</option>
+                          <option value="network">Network / IP (WiFi / LAN)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {!kotPrinterActive && localPrinterSettings.kotPrinter?.type === 'network' && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-black text-gray-700 mb-2">Printer IP Address</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. 192.168.1.101" 
+                          className="w-full p-3 rounded-xl border border-orange-300 font-bold focus:ring-2 ring-orange-500"
+                          value={localPrinterSettings.kotPrinter.ipAddress || ''}
+                          onChange={(e) => setLocalPrinterSettings(s => ({ ...s, kotPrinter: { ...s.kotPrinter!, ipAddress: e.target.value } }))}
+                        />
+                      </div>
+                    )}
+
+                    {kotPrinterActive && (
+                      <div className="mb-4 p-3 bg-white rounded-xl border text-sm font-bold text-gray-600">
+                        🖨️ {kotPrinterActive.label}
+                      </div>
+                    )}
+
+                    <div className="flex gap-3">
+                      {kotPrinterActive ? (
+                        <button
+                          onClick={() => handleDisconnectPrinter('kot')}
+                          className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-black text-sm border-2 border-gray-300 hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                        >
+                          <WifiOff size={16} /> Disconnect / Clear
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleConnectPrinter('kot')}
+                          disabled={printerConnecting === 'kot'}
+                          className="flex-1 py-3 px-4 bg-[#F57C00] text-white rounded-xl font-black text-sm hover:bg-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60 shadow-lg shadow-orange-100"
+                        >
+                          {printerConnecting === 'kot' ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Wifi size={16} />
+                          )}
+                          {printerConnecting === 'kot' ? 'Processing...' : localPrinterSettings.kotPrinter?.type === 'network' ? 'Save & Use IP' : 'Select Printer'}
+                        </button>
+                      )}
+                      {kotPrinterActive && (
+                        <button
+                          onClick={() => handleTestPrint('kot')}
+                          disabled={testPrinting === 'kot'}
+                          className="py-3 px-4 bg-white text-[#F57C00] rounded-xl font-black text-sm border-2 border-orange-300 hover:bg-orange-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                        >
+                          {testPrinting === 'kot' ? <div className="w-4 h-4 border-2 border-[#F57C00] border-t-transparent rounded-full animate-spin" /> : <Zap size={16} />}
+                          Test KOT
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Info note */}
+                <div className="p-4 border-2 border-amber-200 rounded-2xl bg-amber-50 text-sm text-amber-800 font-bold space-y-2">
+                  <p className="font-black text-amber-900 flex items-center gap-2"><WifiOff size={18} /> Important Browser Printing Notes</p>
+                  <p>• <strong>Connection resets:</strong> USB and Serial printer connections reset on page refresh. You must reconnect printers after reloading the page.</p>
+                  <p>• <strong>Network/IP Printers:</strong> Direct IP printing from a web page may be blocked by some printers. If test prints fail, your printer does not support HTTP raw printing natively.</p>
+                  <p>• <strong>Windows USB:</strong> If your USB printer isn't detected by WebUSB, you may need to assign a WinUSB driver using Zadig.</p>
+                  <p>• <strong>Fallback:</strong> If no ESC/POS printer is connected, the standard browser print dialog will appear.</p>
+                </div>
+
+                {/* Save button */}
+                <button
+                  onClick={handleSavePrinterConfig}
+                  className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95 mb-6"
+                >
+                  <Save size={20} /> Save Printer Settings
+                </button>
+
               </div>
             </div>
           )}

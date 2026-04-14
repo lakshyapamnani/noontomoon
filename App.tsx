@@ -32,7 +32,8 @@ import {
   OrderStatus, 
   RestaurantInfo,
   Table,
-  Floor
+  Floor,
+  PrinterSettings
 } from './types';
 import { 
   INITIAL_CATEGORIES, 
@@ -47,6 +48,7 @@ import OrdersList from './components/OrdersList';
 import Reports from './components/Reports';
 import MenuManagement from './components/MenuManagement';
 import TablesGrid from './components/TablesGrid';
+import { printEscPos, buildRunningBillLines } from './components/printer';
 
 // Firebase imports
 import { db, auth } from './firebase';
@@ -145,6 +147,10 @@ const App: React.FC = () => {
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>(() => {
     const saved = localStorage.getItem('drona_restaurant_info');
     return saved ? JSON.parse(saved) : INITIAL_RESTAURANT_INFO;
+  });
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() => {
+    const saved = localStorage.getItem('drona_printer_settings');
+    return saved ? JSON.parse(saved) : { printerWidth: 80, useSamePrinter: false };
   });
 
   const buildRecordById = (items: Array<{ id: string }>) => {
@@ -474,6 +480,10 @@ const App: React.FC = () => {
         if (data.drinkTaxRate !== undefined) {
           setDrinkTaxRate(data.drinkTaxRate);
           localStorage.setItem('drona_drink_tax_rate', data.drinkTaxRate.toString());
+        }
+        if (data.printerSettings !== undefined) {
+          setPrinterSettings(data.printerSettings);
+          localStorage.setItem('drona_printer_settings', JSON.stringify(data.printerSettings));
         }
       }
     });
@@ -845,6 +855,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSavePrinterSettings = async (settings: PrinterSettings) => {
+    setPrinterSettings(settings);
+    localStorage.setItem('drona_printer_settings', JSON.stringify(settings));
+    try {
+      await update(ref(db, userPath('settings')), { printerSettings: settings });
+    } catch (error) {
+      console.error("Firebase Sync Error (Printer Settings):", error);
+    }
+  };
+
   const handleUpdateTableCarts = async (newTableCarts: Record<string, { items: any[]; customerName: string }>) => {
     const normalized = normalizeTableCarts(newTableCarts);
     const cleanTableCarts = sanitizeForFirebase(normalized);
@@ -931,8 +951,8 @@ const App: React.FC = () => {
     }
   };
 
-  // Print bill for a table from the tables screen
-  const handlePrintTableBill = (tableId: string) => {
+  // Print bill for a table from the tables screen (running bill)
+  const handlePrintTableBill = async (tableId: string) => {
     const cart = tableCarts[tableId];
     if (!cart || !cart.items || cart.items.length === 0) {
       alert('No items on this table to print.');
@@ -945,6 +965,32 @@ const App: React.FC = () => {
     const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
     const customerName = cart.customerName || 'Guest';
 
+
+    // Try ESC/POS first
+    const widthMm = (printerSettings.printerWidth ?? 80) as 80 | 58;
+    const runningLines = buildRunningBillLines({
+      restaurantName: restaurantInfo.name,
+      address: restaurantInfo.address,
+      phone: restaurantInfo.phone,
+      gstNo: restaurantInfo.gstNo,
+      tableName,
+      customerName,
+      items: items.map(it => ({
+        name: it.name,
+        quantity: it.quantity,
+        price: it.price || 0,
+        selectedPortion: it.selectedPortion,
+      })),
+      subtotal,
+      taxRate,
+      taxAmount,
+      total,
+    });
+
+    const printed = await printEscPos('bill', runningLines, widthMm);
+    if (printed) return;
+
+    // Fallback: iframe print
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
@@ -971,13 +1017,14 @@ const App: React.FC = () => {
               padding: 3mm; 
               font-size: 11px; 
               color: #000; 
+              font-weight: 900;
               line-height: 1.3;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
             .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .line { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .bold { font-weight: 900; }
+            .line { border-bottom: 1px dashed #000; margin: 6px 0; border-width: 2px; }
             .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
             .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
             .item-name { flex: 1; min-width: 0; word-break: break-word; }
@@ -1125,6 +1172,7 @@ const App: React.FC = () => {
             onUpdateTableCarts={handleUpdateTableCarts}
             variant="desktop"
             selectedTableId={selectedTableId}
+            printerSettings={printerSettings}
             onBackToTables={() => {
               setSelectedTableId(null);
               setActiveScreen('TABLES');
@@ -1143,6 +1191,7 @@ const App: React.FC = () => {
             restaurantInfo={restaurantInfo}
             taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             categories={categories}
+            printerSettings={printerSettings}
           />
         );
       case 'ALL_ORDERS':
@@ -1155,6 +1204,7 @@ const App: React.FC = () => {
             restaurantInfo={restaurantInfo}
             taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             categories={categories}
+            printerSettings={printerSettings}
           />
         );
       case 'COMPLETED_ORDERS':
@@ -1167,6 +1217,7 @@ const App: React.FC = () => {
             restaurantInfo={restaurantInfo}
             taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             categories={categories}
+            printerSettings={printerSettings}
           />
         );
       case 'CANCELLED_ORDERS':
@@ -1179,6 +1230,7 @@ const App: React.FC = () => {
             restaurantInfo={restaurantInfo}
             taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             categories={categories}
+            printerSettings={printerSettings}
           />
         );
       case 'REPORTS':
@@ -1206,6 +1258,8 @@ const App: React.FC = () => {
             onDeleteTable={handleDeleteTable}
             onAddFloor={handleAddFloor}
             onDeleteFloor={handleDeleteFloor}
+            printerSettings={printerSettings}
+            onSavePrinterSettings={handleSavePrinterSettings}
 
             onResetMenuDatabase={handleResetMenuDatabase}
             onFactoryReset={handleFactoryReset}
@@ -1243,6 +1297,7 @@ const App: React.FC = () => {
         onUpdateTableStatus={handleUpdateTableStatus}
         onUpdateTableCarts={handleUpdateTableCarts}
         variant="mobile"
+        printerSettings={printerSettings}
       />
     );
   };

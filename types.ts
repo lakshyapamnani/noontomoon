@@ -81,3 +81,18 @@ export interface SalesReportEntry {
   totalSales: number;
   paymentModes: Record<PaymentMode, number>;
 }
+
+export type PrinterConnectionType = 'serial' | 'usb' | 'network';
+
+export interface PrinterConfig {
+  type: PrinterConnectionType;
+  ipAddress?: string;
+  label?: string; // display label
+}
+
+export interface PrinterSettings {
+  printerWidth?: 80 | 58;        // Paper width in mm
+  useSamePrinter?: boolean;      // KOT uses bill printer
+  billPrinter?: PrinterConfig;
+  kotPrinter?: PrinterConfig;
+}
