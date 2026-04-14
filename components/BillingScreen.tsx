@@ -23,6 +23,8 @@ import {
   ChefHat,
   Printer
 } from 'lucide-react';
+import { PrinterSettings } from '../types';
+import { printEscPos, buildBillLines, buildKOTLines, getConnectedPrinterLabel } from './printer';
 import QRCode from 'qrcode';
 import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor } from '../types';
 import TablesGrid from './TablesGrid';
@@ -253,6 +255,7 @@ interface BillingScreenProps {
   selectedTableId?: string | null;
   onBackToTables?: () => void;
   variant?: 'desktop' | 'mobile';
+  printerSettings?: PrinterSettings;
 }
 
 const BillingScreen: React.FC<BillingScreenProps> = ({ 
@@ -270,6 +273,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   selectedTableId: selectedTableIdProp = null,
   onBackToTables,
   variant = 'desktop',
+  printerSettings,
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || '');
   const [selectedTableId, setSelectedTableId] = useState<string | null>(selectedTableIdProp ?? null);
@@ -531,6 +535,48 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const total = subtotal + tax;
 
   const printReceipt = async (order: Order) => {
+    // Compute GST/VAT for this order using current category data
+    const orderFoodSub = order.items.reduce((acc, it) => {
+      return !isDrinkCategory(it.categoryId) ? acc + it.price * it.quantity : acc;
+    }, 0);
+    const orderDrinkSub = order.items.reduce((acc, it) => {
+      return isDrinkCategory(it.categoryId) ? acc + it.price * it.quantity : acc;
+    }, 0);
+    const orderGst = orderFoodSub * taxRate;
+    const orderVat = orderDrinkSub * drinkTaxRate;
+
+    const widthMm = (printerSettings?.printerWidth ?? 80) as 80 | 58;
+    const billLines = buildBillLines({
+      restaurantName: restaurantInfo.name,
+      address: restaurantInfo.address,
+      phone: restaurantInfo.phone,
+      gstNo: restaurantInfo.gstNo,
+      billNo: order.billNo,
+      customerName: order.customerName,
+      date: order.date,
+      time: order.time,
+      orderType: order.orderType,
+      tableName: order.tableName,
+      items: order.items.map(it => ({
+        name: it.name,
+        quantity: it.quantity,
+        price: it.price,
+        selectedPortion: it.selectedPortion,
+        selectedMl: (it as any).selectedMl,
+      })),
+      subtotal: order.subtotal,
+      gst: orderGst,
+      vat: orderVat,
+      tax: order.tax,
+      total: order.total,
+      paymentMode: order.paymentMode,
+    });
+
+    // Try ESC/POS first
+    const printed = await printEscPos('bill', billLines, widthMm);
+    if (printed) return;
+
+    // Fallback: iframe print
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
@@ -570,7 +616,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             .item-name { flex: 1; min-width: 0; word-break: break-word; }
             .qty { width: 24px; text-align: center; font-weight: bold; flex-shrink: 0; }
             .amt { width: 40px; text-align: right; flex-shrink: 0; }
-            .addon-row { font-size: 9px; color: #000; padding-left: 8px; margin: 1px 0; }
             .total-section { font-size: 13px; font-weight: bold; margin-top: 4px; }
             .footer { font-size: 10px; margin-top: 8px; }
           </style>
@@ -598,12 +643,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               <span class="qty">${it.quantity}</span>
               <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
-
           `).join('')}
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
-          <div class="row"><span>GST:</span><span>Rs ${gst.toFixed(0)}</span></div>
-          <div class="row"><span>VAT:</span><span>Rs ${vat.toFixed(0)}</span></div>
+          <div class="row"><span>GST:</span><span>Rs ${orderGst.toFixed(0)}</span></div>
+          <div class="row"><span>VAT:</span><span>Rs ${orderVat.toFixed(0)}</span></div>
           <div class="row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
           <div class="row bold total-section"><span>TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
@@ -627,7 +671,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     iframeDoc.write(html);
     iframeDoc.close();
 
-    // Clean up iframe after printing
     const handleMessage = (event: MessageEvent) => {
       if (event.data === 'print-done') {
         document.body.removeChild(iframe);
@@ -635,12 +678,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       }
     };
     window.addEventListener('message', handleMessage);
-    
-    // Fallback cleanup if message fails
     setTimeout(() => {
-      if (document.body.contains(iframe)) {
-        document.body.removeChild(iframe);
-      }
+      if (document.body.contains(iframe)) document.body.removeChild(iframe);
     }, 5000);
   };
 
@@ -651,7 +690,29 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    
+    const widthMm = (printerSettings?.printerWidth ?? 80) as 80 | 58;
+
+    // Determine which printer to use for KOT
+    const kotPurpose = printerSettings?.useSamePrinter ? 'bill' : 'kot';
+
+    const kotLines = buildKOTLines({
+      tableName: selectedTable?.name || 'TAKEAWAY',
+      customerName: customerName || undefined,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      items: currentCart.map(it => ({
+        name: it.name,
+        quantity: it.quantity,
+        selectedPortion: it.selectedPortion,
+        selectedVegChoice: it.selectedVegChoice,
+        selectedMl: (it as any).selectedMl,
+      })),
+    });
+
+    // Try ESC/POS first
+    const printed = await printEscPos(kotPurpose, kotLines, widthMm);
+    if (printed) return;
+
+    // Fallback: iframe print
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
@@ -742,11 +803,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       }
     };
     window.addEventListener('message', handleMessage);
-    
     setTimeout(() => {
-      if (document.body.contains(iframe)) {
-        document.body.removeChild(iframe);
-      }
+      if (document.body.contains(iframe)) document.body.removeChild(iframe);
     }, 5000);
   };
 

@@ -25,7 +25,8 @@ import {
   Trash2,
   Download
 } from 'lucide-react';
-import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
+import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode, PrinterSettings } from '../types';
+import { printEscPos, buildBillLines } from './printer';
 
 const formatItemDisplay = (it: CartItem) => {
   return `${it.name} x ${it.quantity}`;
@@ -40,9 +41,10 @@ interface OrdersListProps {
   taxRate: number;
   drinkTaxRate?: number;
   categories?: Category[];
+  printerSettings?: PrinterSettings;
 }
 
-const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [] }) => {
+const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [], printerSettings }) => {
   const isAllBillsView = title === "All Bills";
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ALL'>('TODAY');
   const [kotCategoryId, setKotCategoryId] = useState<string>('all');
@@ -117,7 +119,50 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
     return displayedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
   }, [displayedOrders]);
 
-  const printReceipt = (order: Order) => {
+  const printReceipt = async (order: Order) => {
+    // Compute GST/VAT from order items
+    const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+    const isDrinkCat = (catId: string) => {
+      const cat = categories.find(c => c.id === catId);
+      return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
+    };
+    const foodSub = (order.items || []).reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
+    const drinkSub = (order.items || []).reduce((s, i) => s + (isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
+    const gstAmt = foodSub * taxRate;
+    const vatAmt = drinkSub * drinkTaxRate;
+
+    const widthMm = (printerSettings?.printerWidth ?? 80) as 80 | 58;
+    const billLines = buildBillLines({
+      restaurantName: restaurantInfo.name,
+      address: restaurantInfo.address,
+      phone: restaurantInfo.phone,
+      gstNo: restaurantInfo.gstNo,
+      billNo: order.billNo,
+      customerName: order.customerName,
+      date: order.date,
+      time: order.time,
+      orderType: order.orderType,
+      tableName: order.tableName,
+      items: order.items.map(it => ({
+        name: it.name,
+        quantity: it.quantity,
+        price: it.price,
+        selectedPortion: it.selectedPortion,
+        selectedMl: (it as any).selectedMl,
+      })),
+      subtotal: order.subtotal,
+      gst: gstAmt,
+      vat: vatAmt,
+      tax: order.tax,
+      total: order.total,
+      paymentMode: order.paymentMode,
+    });
+
+    // Try ESC/POS first
+    const printed = await printEscPos('bill', billLines, widthMm);
+    if (printed) return;
+
+    // Fallback: iframe print
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
@@ -186,7 +231,8 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           `).join('')}
           <div class="line"></div>
           <div class="item-row"><span>Subtotal:</span><span>₹${order.subtotal.toFixed(0)}</span></div>
-          <div class="item-row"><span>Tax (${(taxRate * 100).toFixed(0)}%):</span><span>₹${order.tax.toFixed(0)}</span></div>
+          <div class="item-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>₹${gstAmt.toFixed(0)}</span></div>
+          <div class="item-row"><span>VAT:</span><span>₹${vatAmt.toFixed(0)}</span></div>
           <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center">Paid via ${order.paymentMode}</div>
