@@ -547,7 +547,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const doIframeReceiptPrint = (order: Order, orderGst: number, orderVat: number) => {
     // Fallback: iframe print
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
     document.body.appendChild(iframe);
     
     const iframeDoc = iframe.contentWindow?.document;
@@ -642,14 +647,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data === 'print-done') {
-        document.body.removeChild(iframe);
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
         window.removeEventListener('message', handleMessage);
       }
     };
     window.addEventListener('message', handleMessage);
     setTimeout(() => {
       if (document.body.contains(iframe)) document.body.removeChild(iframe);
-    }, 5000);
+      window.removeEventListener('message', handleMessage);
+    }, 300000); // 5 minutes fallback
   };
 
   const printKOT = async () => {
@@ -664,7 +670,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const doIframeKOTPrint = (selectedTable: Table | undefined) => {
     // iframe print
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
     document.body.appendChild(iframe);
     
     const iframeDoc = iframe.contentWindow?.document;
@@ -748,14 +759,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data === 'print-done') {
-        document.body.removeChild(iframe);
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
         window.removeEventListener('message', handleMessage);
       }
     };
     window.addEventListener('message', handleMessage);
     setTimeout(() => {
       if (document.body.contains(iframe)) document.body.removeChild(iframe);
-    }, 5000);
+      window.removeEventListener('message', handleMessage);
+    }, 300000); // 5 minutes fallback
   };
 
 
