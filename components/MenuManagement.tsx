@@ -529,6 +529,32 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
                      />
                    </div>
+
+                   <hr className="my-6 border-gray-200" />
+                   <h4 className="text-lg font-black text-gray-900 mb-4">Printer Setup</h4>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">KOT Printer IP</label>
+                     <input 
+                      type="text" 
+                      value={localRestaurantInfo.kotPrinterIp || '192.168.0.114'} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, kotPrinterIp: e.target.value})}
+                      placeholder="e.g., 192.168.0.114"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-blue-500 outline-none shadow-inner placeholder:text-gray-400" 
+                     />
+                     <p className="text-xs text-gray-500 mt-2 font-bold">The network IP address of your kitchen printer.</p>
+                   </div>
+                   <div>
+                     <label className="flex items-center gap-3 cursor-pointer font-black text-gray-900 border-2 border-gray-200 p-4 rounded-xl hover:bg-gray-50 transition-colors">
+                       <input 
+                         type="checkbox" 
+                         checked={localRestaurantInfo.useUsbForBill ?? true}
+                         onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, useUsbForBill: e.target.checked})}
+                         className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                       />
+                       <span>Use USB Printer for Main Bill</span>
+                     </label>
+                     <p className="text-xs text-gray-500 mt-2 font-bold ml-2">Applies to native ESC/POS print server (Requires Print Server running locally).</p>
+                   </div>
                    <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-xl font-black text-lg flex items-center justify-center gap-2 hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all active:scale-95">
                      <Save size={20} /> Save Business Profile
                    </button>

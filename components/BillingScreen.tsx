@@ -541,6 +541,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const orderGst = orderFoodSub * taxRate;
     const orderVat = orderDrinkSub * drinkTaxRate;
 
+    doIframeReceiptPrint(order, orderGst, orderVat);
+  };
+
+  const doIframeReceiptPrint = (order: Order, orderGst: number, orderVat: number) => {
     // Fallback: iframe print
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
@@ -561,38 +565,38 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             @page { size: 80mm auto; margin: 0; }
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body {
-              font-family: Arial, sans-serif;
+              font-family: 'Arial Black', Arial, sans-serif;
               width: 76mm;
               max-width: 76mm;
               margin: 0 auto;
               padding: 3mm;
-              font-size: 13px;
-              color: #000;
+              font-size: 14px;
+              color: #000 !important;
               line-height: 1.4;
-              font-weight: bold;
+              font-weight: 900;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
             .center { text-align: center; }
-            .bold { font-weight: bold; }
+            .bold { font-weight: 900; }
             .line { border-bottom: 2px dashed #000; margin: 6px 0; }
-            .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
-            .item-name { flex: 1; min-width: 0; word-break: break-word; }
-            .qty { width: 24px; text-align: center; font-weight: bold; flex-shrink: 0; }
-            .amt { width: 40px; text-align: right; flex-shrink: 0; }
-            .total-section { font-size: 13px; font-weight: bold; margin-top: 4px; }
-            .footer { font-size: 10px; margin-top: 8px; }
+            .header-name { font-size: 18px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
+            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 900; }
+            .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 900; }
+            .qty { width: 24px; text-align: center; font-weight: 900; flex-shrink: 0; }
+            .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 900; }
+            .total-section { font-size: 16px; font-weight: 900; margin-top: 4px; }
+            .footer { font-size: 12px; margin-top: 8px; font-weight: 900; }
           </style>
         </head>
         <body>
           <div class="center header-name">${restaurantInfo.name}</div>
           <div class="center">${restaurantInfo.address}</div>
           <div class="center">Tel: ${restaurantInfo.phone}</div>
-          ${restaurantInfo.gstNo ? `<div class="center" style="font-size:10px;">GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
+          ${restaurantInfo.gstNo ? '<div class="center" style="font-size:10px;">GSTIN: ' + restaurantInfo.gstNo + '</div>' : ''}
           <div class="line"></div>
           <div>Bill: ${order.billNo}</div>
-          ${order.customerName ? `<div>Cust: ${order.customerName}</div>` : ''}
+          ${order.customerName ? '<div>Cust: ' + order.customerName + '</div>' : ''}
           <div>Date: ${order.date}</div>
           <div>Time: ${order.time}</div>
           <div>Type: ${order.orderType.replace('_', ' ')}</div>
@@ -654,7 +658,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       return;
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
+    doIframeKOTPrint(selectedTable);
+  };
 
+  const doIframeKOTPrint = (selectedTable: Table | undefined) => {
     // iframe print
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
@@ -702,7 +709,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           <div class="center header">K. O. T.</div>
           <div class="line"></div>
           <div class="table-info center uppercase">TABLE: ${selectedTable?.name || 'TAKEAWAY'}</div>
-          ${customerName ? `<div class="center bold">Cust: ${customerName}</div>` : ''}
+          ${customerName ? '<div class="center bold">Cust: ' + customerName + '</div>' : ''}
           <div class="center">Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
           <div class="line"></div>
           <div class="bold item-row">

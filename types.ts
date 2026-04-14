@@ -23,6 +23,8 @@ export interface RestaurantInfo {
   phone: string;
   address: string;
   gstNo?: string;
+  kotPrinterIp?: string;
+  useUsbForBill?: boolean;
 }
 
 export type VegType = 'VEG' | 'NON_VEG' | 'SEAFOOD' | 'BOTH';

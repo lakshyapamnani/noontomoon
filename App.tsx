@@ -159,7 +159,7 @@ const App: React.FC = () => {
 
   const sortTables = (tableArray: Table[]) => {
     return [...tableArray].sort((a, b) => 
-      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+      (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })
     );
   };
 
@@ -961,33 +961,33 @@ const App: React.FC = () => {
     const html = `
       <html>
         <head>
-          <title>Running Bill - ${tableName}</title>
+          <title>Receipt - ${tableName}</title>
           <style>
             @page { size: 80mm auto; margin: 0; }
             * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 76mm; 
+            body {
+              font-family: 'Arial Black', Arial, sans-serif;
+              width: 76mm;
               max-width: 76mm;
-              margin: 0 auto; 
-              padding: 3mm; 
-              font-size: 11px; 
-              color: #000; 
+              margin: 0 auto;
+              padding: 3mm;
+              font-size: 14px;
+              color: #000 !important;
+              line-height: 1.4;
               font-weight: 900;
-              line-height: 1.3;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
             .center { text-align: center; }
             .bold { font-weight: 900; }
-            .line { border-bottom: 1px dashed #000; margin: 6px 0; border-width: 2px; }
-            .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
-            .item-name { flex: 1; min-width: 0; word-break: break-word; }
-            .qty { width: 24px; text-align: center; font-weight: bold; flex-shrink: 0; }
-            .amt { width: 40px; text-align: right; flex-shrink: 0; }
-            .total-section { font-size: 13px; font-weight: bold; margin-top: 4px; }
-            .footer { font-size: 10px; margin-top: 8px; }
+            .line { border-bottom: 2px dashed #000; margin: 6px 0; }
+            .header-name { font-size: 18px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
+            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 900; }
+            .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 900; }
+            .qty { width: 24px; text-align: center; font-weight: 900; flex-shrink: 0; }
+            .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 900; }
+            .total-section { font-size: 16px; font-weight: 900; margin-top: 4px; }
+            .footer { font-size: 12px; margin-top: 8px; font-weight: 900; }
           </style>
         </head>
         <body>
@@ -996,10 +996,11 @@ const App: React.FC = () => {
           <div class="center">Tel: ${restaurantInfo.phone}</div>
           ${restaurantInfo.gstNo ? `<div class="center" style="font-size:10px;">GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
           <div class="line"></div>
-          <div class="center bold">${tableName} - RUNNING BILL</div>
-          <div>Cust: ${customerName}</div>
+          <div>Table: ${tableName}</div>
+          ${customerName && customerName !== 'Guest' ? `<div>Cust: ${customerName}</div>` : ''}
           <div>Date: ${new Date().toLocaleDateString()}</div>
           <div>Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          <div>Type: DINE IN</div>
           <div class="line"></div>
           <div class="row bold">
             <span class="item-name">Item</span>
@@ -1008,17 +1009,21 @@ const App: React.FC = () => {
           </div>
           ${items.map(it => `
             <div class="row">
-              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
+              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}${(it as any).selectedMl ? ` (${(it as any).selectedMl})` : ''}</span>
               <span class="qty">${it.quantity}</span>
               <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
             </div>
           `).join('')}
           <div class="line"></div>
-          <div class="row"><span>Subtotal:</span><span>₹${subtotal.toFixed(0)}</span></div>
-          <div class="row"><span>Tax (${(taxRate * 100).toFixed(0)}%):</span><span>₹${taxAmount.toFixed(0)}</span></div>
-          <div class="row bold total-section"><span>TOTAL:</span><span>₹${total.toFixed(0)}</span></div>
+          <div class="row"><span>Subtotal:</span><span>Rs ${subtotal.toFixed(0)}</span></div>
+          <div class="row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
+          <div class="row bold total-section"><span>TOTAL:</span><span>Rs ${total.toFixed(0)}</span></div>
           <div class="line"></div>
-          <div class="center footer" style="margin-top:8px;">** Running Bill - Not Final **</div>
+          <div class="center bold">Not Paid Yet</div>
+          <div class="footer center">
+            <p class="bold">Thank you!</p>
+            <p class="bold">Visit again.</p>
+          </div>
           <script>
             window.onload = function() {
               window.print();
