@@ -25,8 +25,7 @@ import {
   Trash2,
   Download
 } from 'lucide-react';
-import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode, PrinterSettings } from '../types';
-import { printEscPos, buildBillLines } from './printer';
+import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
 
 const formatItemDisplay = (it: CartItem) => {
   return `${it.name} x ${it.quantity}`;
@@ -41,10 +40,9 @@ interface OrdersListProps {
   taxRate: number;
   drinkTaxRate?: number;
   categories?: Category[];
-  printerSettings?: PrinterSettings;
 }
 
-const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [], printerSettings }) => {
+const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [] }) => {
   const isAllBillsView = title === "All Bills";
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ALL'>('TODAY');
   const [kotCategoryId, setKotCategoryId] = useState<string>('all');
@@ -131,38 +129,8 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
     const gstAmt = foodSub * taxRate;
     const vatAmt = drinkSub * drinkTaxRate;
 
-    const widthMm = (printerSettings?.printerWidth ?? 80) as 80 | 58;
-    const billLines = buildBillLines({
-      restaurantName: restaurantInfo.name,
-      address: restaurantInfo.address,
-      phone: restaurantInfo.phone,
-      gstNo: restaurantInfo.gstNo,
-      billNo: order.billNo,
-      customerName: order.customerName,
-      date: order.date,
-      time: order.time,
-      orderType: order.orderType,
-      tableName: order.tableName,
-      items: order.items.map(it => ({
-        name: it.name,
-        quantity: it.quantity,
-        price: it.price,
-        selectedPortion: it.selectedPortion,
-        selectedMl: (it as any).selectedMl,
-      })),
-      subtotal: order.subtotal,
-      gst: gstAmt,
-      vat: vatAmt,
-      tax: order.tax,
-      total: order.total,
-      paymentMode: order.paymentMode,
-    });
 
-    // Try ESC/POS first
-    const printed = await printEscPos('bill', billLines, widthMm);
-    if (printed) return;
-
-    // Fallback: iframe print
+    // iframe print
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
