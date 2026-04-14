@@ -158,7 +158,7 @@ const TablesGrid: React.FC<TablesGridProps> = ({
         {floorSections.map((section, sectionIdx) => (
           <React.Fragment key={section.floorId || `section-${sectionIdx}`}>
             {floors.length > 0 && section.label && (
-              <>
+              <React.Fragment key={`header-${sectionIdx}`}>
                 {sectionIdx > 0 && (
                   <div
                     className="col-span-full my-2 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"
@@ -170,7 +170,7 @@ const TablesGrid: React.FC<TablesGridProps> = ({
                     {section.label}
                   </div>
                 </div>
-              </>
+              </React.Fragment>
             )}
             {section.tables.map((table) => renderCard(table))}
           </React.Fragment>

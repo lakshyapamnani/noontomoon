@@ -148,28 +148,28 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
             @page { size: 80mm auto; margin: 0; }
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { 
-              font-family: Arial, sans-serif; 
+              font-family: 'Arial Black', Arial, sans-serif; 
               width: 76mm; 
               max-width: 76mm;
               margin: 0 auto; 
               padding: 3mm; 
-              font-size: 11px; 
-              color: #000; 
+              font-size: 14px; 
+              color: #000 !important; 
               line-height: 1.3;
-              font-weight: bold;
+              font-weight: 900;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
             .center { text-align: center; }
-            .bold { font-weight: bold; }
+            .bold { font-weight: 900; }
             .line { border-bottom: 2px dashed #000; margin: 8px 0; }
-            .header-name { font-size: 14px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-            .item-row { display: flex; justify-content: space-between; margin: 4px 0; }
-            .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; }
-            .qty { width: 25px; text-align: center; }
-            .price { width: 45px; text-align: right; }
-            .footer { margin-top: 15px; font-size: 10px; }
-            .total-section { font-size: 12px; margin-top: 5px; }
+            .header-name { font-size: 18px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
+            .item-row { display: flex; justify-content: space-between; margin: 4px 0; font-weight: 900; }
+            .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; font-weight: 900; }
+            .qty { width: 25px; text-align: center; font-weight: 900; }
+            .price { width: 45px; text-align: right; font-weight: 900; }
+            .footer { margin-top: 15px; font-size: 12px; font-weight: 900; }
+            .total-section { font-size: 16px; margin-top: 5px; font-weight: 900; }
           </style>
         </head>
         <body>
