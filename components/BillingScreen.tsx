@@ -307,19 +307,35 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       byId.set(String(category.id), isDrink);
     });
 
-    return (categoryId: string) => categoryId === 'OPEN_BAR' || byId.get(String(categoryId)) === true;
+    return (categoryId: string) => 
+      categoryId === 'OPEN_BAR' || 
+      categoryId === 'cat_open_bar' || 
+      byId.get(String(categoryId)) === true;
   }, [categories]);
   
   const filteredCategories = useMemo(() => {
-    const list = categories.filter(cat => 
+    const filtered = categories.filter(cat => 
       menuType === 'DRINK' ? cat.type === 'DRINK' : (!cat.type || cat.type === 'FOOD')
     );
-    
-    // Add virtual "Open" categories at the end of both views
-    list.push({ id: 'VIRTUAL-OPEN-FOOD', name: 'Open Food', type: 'FOOD' });
-    list.push({ id: 'VIRTUAL-OPEN-BAR', name: 'Open Bar', type: 'DRINK' });
-    
-    return list;
+
+    // Keep "Open" categories at the bottom (Open Food / Open Bar)
+    const isOpenCategory = (cat: Category) => {
+      const id = String(cat.id);
+      const name = (cat.name || '').toLowerCase();
+      return (
+        id === 'cat_open_food' ||
+        id === 'OPEN_FOOD' ||
+        id === 'cat_open_bar' ||
+        id === 'OPEN_BAR' ||
+        name === 'open food' ||
+        name === 'open bar' ||
+        name === 'open drink'
+      );
+    };
+
+    const normal = filtered.filter(c => !isOpenCategory(c));
+    const open = filtered.filter(isOpenCategory);
+    return [...normal, ...open];
   }, [categories, menuType]);
 
   // Ensure selectedCategoryId is always valid when categories change
@@ -387,114 +403,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         item => item && item.name && item.name.toLowerCase().includes(query)
       );
     }
-    // Filter by category - items must have a matching categoryId to appear
-    if (selectedCategoryId === 'VIRTUAL-OPEN-FOOD') {
-      return [
-        {
-          id: 'manual-open-food',
-          name: 'Open Food',
-          price: 0,
-          categoryId: 'VIRTUAL-OPEN-FOOD',
-          vegType: 'VEG',
-          nonVegPrice: 0,
-          vegPrice: 0,
-          mlPrices: {},
-          hasPortions: false,
-          halfPrice: 0
-        },
-        {
-          id: 'db-lunch-special',
-          name: 'Lunch',
-          price: 750,
-          categoryId: 'VIRTUAL-OPEN-FOOD',
-          vegType: 'VEG',
-          nonVegPrice: 0,
-          vegPrice: 0,
-          mlPrices: {},
-          hasPortions: false,
-          halfPrice: 0
-        },
-        {
-          id: 'db-permit-fee-food',
-          name: 'Permit',
-          price: 5,
-          categoryId: 'VIRTUAL-OPEN-FOOD',
-          vegType: 'VEG',
-          nonVegPrice: 0,
-          vegPrice: 0,
-          mlPrices: {},
-          hasPortions: false,
-          halfPrice: 0
-        }
-      ] as MenuItem[];
-    }
-    if (selectedCategoryId === 'VIRTUAL-OPEN-BAR') {
-      return [
-        {
-          id: 'manual-open-bar',
-          name: 'Open Bar',
-          price: 0,
-          categoryId: 'VIRTUAL-OPEN-BAR',
-          vegType: 'VEG',
-          nonVegPrice: 0,
-          vegPrice: 0,
-          mlPrices: {},
-          hasPortions: false,
-          halfPrice: 0
-        },
-        {
-          id: 'db-permit-fee',
-          name: 'Permit',
-          price: 5,
-          categoryId: 'VIRTUAL-OPEN-BAR',
-          vegType: 'VEG',
-          nonVegPrice: 0,
-          vegPrice: 0,
-          mlPrices: {},
-          hasPortions: false,
-          halfPrice: 0
-        },
-        {
-          id: 'db-lunch-special-bar',
-          name: 'Lunch',
-          price: 750,
-          categoryId: 'VIRTUAL-OPEN-BAR',
-          vegType: 'VEG',
-          nonVegPrice: 0,
-          vegPrice: 0,
-          mlPrices: {},
-          hasPortions: false,
-          halfPrice: 0
-        }
-      ] as MenuItem[];
-    }
-
     const filtered = menuItems.filter(
-      item => item && item.categoryId && String(item.categoryId) === String(selectedCategoryId)
+      item => item && item.id && item.categoryId && String(item.categoryId) === String(selectedCategoryId)
     );
     return filtered;
   }, [selectedCategoryId, menuItems, menuSearchQuery]);
 
 
 
-  const handleAddItem = (item: MenuItem) => {
-    // If it's a manual open item, trigger modal instead of adding directly
-    if (item.id === 'manual-open-food') {
-      setOpenItemModal({ isOpen: true, type: 'FOOD' });
-      return;
-    }
-    if (item.id === 'manual-open-bar') {
-      setOpenItemModal({ isOpen: true, type: 'DRINK' });
-      return;
-    }
-
-    // If item has both veg/non-veg options OR portions OR ML sizes, show popup
-    if (item.vegType === 'BOTH' || item.hasPortions || (item.mlPrices && Object.keys(item.mlPrices).length > 0)) {
-      setOptionsItem(item);
-      return;
-    }
-    addToCart(item);
-  };
 
   const handleOpenItemSubmit = () => {
     if (!openItemForm.name || !openItemForm.rate) {
@@ -524,6 +440,26 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     addToCart(mockItem);
     setOpenItemModal({ isOpen: false, type: null });
     setOpenItemForm({ name: '', rate: '' });
+  };
+
+  const handleAddItem = (item: MenuItem) => {
+    if (!item) return;
+    // If it's a manual open item, trigger modal instead of adding directly
+    if (item.id === 'manual-open-food') {
+      setOpenItemModal({ isOpen: true, type: 'FOOD' });
+      return;
+    }
+    if (item.id === 'manual-open-bar') {
+      setOpenItemModal({ isOpen: true, type: 'DRINK' });
+      return;
+    }
+
+    // If item has both veg/non-veg options OR portions OR ML sizes, show popup
+    if (item.vegType === 'BOTH' || item.hasPortions || (item.mlPrices && Object.keys(item.mlPrices).length > 0)) {
+      setOptionsItem(item);
+      return;
+    }
+    addToCart(item);
   };
 
   const handleItemOptions = (vegChoice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null, mlChoice?: string | null) => {
@@ -1597,9 +1533,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           </div>
         ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-          {filteredItems.map(item => (
-            <button
-              key={item.id}
+          {filteredItems.map(item => {
+            if (!item) return null;
+            return (
+              <button
+                key={item.id}
               onClick={() => handleAddItem(item)}
               className="bg-white rounded-2xl shadow-sm border-2 border-transparent hover:border-[#F57C00] hover:shadow-lg transition-all p-4 text-left relative group flex flex-col h-full"
             >
@@ -1632,7 +1570,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 </div>
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
         )}
       </div>

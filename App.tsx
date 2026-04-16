@@ -316,6 +316,69 @@ const App: React.FC = () => {
   // Helper to get shared Firebase path (auth removed)
   const userPath = (path: string) => `users/public/${path}`;
 
+  const syncOpenCategories = async () => {
+    try {
+      const categoriesRef = ref(db, userPath('categories'));
+      const menuRef = ref(db, userPath('menu_items'));
+
+      const catSnap = await get(categoriesRef);
+      const categoriesData = catSnap.val() || {};
+      const catArray = Object.values(categoriesData) as Category[];
+
+      const openFoodExists = catArray.some(c => c.id === 'cat_open_food' || c.name === 'Open Food');
+      const openBarExists = catArray.some(c => c.id === 'cat_open_bar' || c.name === 'Open Bar');
+
+      const updates: any = {};
+      let finalOpenFoodId = 'cat_open_food';
+      let finalOpenBarId = 'cat_open_bar';
+
+      if (!openFoodExists) {
+        updates[userPath('categories/cat_open_food')] = { id: 'cat_open_food', name: 'Open Food', type: 'FOOD', taxType: 'GST' };
+      } else {
+        finalOpenFoodId = catArray.find(c => c.id === 'cat_open_food' || c.name === 'Open Food')?.id || 'cat_open_food';
+      }
+
+      if (!openBarExists) {
+        updates[userPath('categories/cat_open_bar')] = { id: 'cat_open_bar', name: 'Open Bar', type: 'DRINK', taxType: 'VAT' };
+      } else {
+        finalOpenBarId = catArray.find(c => c.id === 'cat_open_bar' || c.name === 'Open Bar')?.id || 'cat_open_bar';
+      }
+
+      const menuSnap = await get(menuRef);
+      const menuData = menuSnap.val() || {};
+      const menuArray = Object.values(menuData) as MenuItem[];
+
+      const itemsToSync = [
+        { id: 'manual-open-food', name: 'Open Food', price: 0, categoryId: finalOpenFoodId },
+        { id: 'item-lunch-db', name: 'Lunch', price: 750, categoryId: finalOpenFoodId },
+        { id: 'manual-open-bar', name: 'Open Bar', price: 0, categoryId: finalOpenBarId },
+        { id: 'item-permit-db', name: 'Permit', price: 5, categoryId: finalOpenBarId },
+      ];
+
+      itemsToSync.forEach(item => {
+        if (!menuArray.some(m => m.id === item.id || (m.name === item.name && m.categoryId === item.categoryId))) {
+          updates[userPath(`menu_items/${item.id}`)] = {
+            ...item,
+            isVeg: true,
+            vegType: 'VEG',
+            nonVegPrice: 0,
+            vegPrice: 0,
+            mlPrices: {},
+            hasPortions: false,
+            halfPrice: 0
+          };
+        }
+      });
+
+      if (Object.keys(updates).length > 0) {
+        await update(ref(db), updates);
+        console.log("Database Sync: Added missing Open categories/items");
+      }
+    } catch (err) {
+      console.error("Database Sync Error:", err);
+    }
+  };
+
   const markOnboardingDone = async () => {
     try {
       await set(ref(db, userPath('meta/onboardingCompleted')), true);
@@ -380,6 +443,7 @@ const App: React.FC = () => {
     };
 
     initializeDatabase();
+    syncOpenCategories();
   }, []);
 
   // Firebase Real-time Listeners
