@@ -16,7 +16,7 @@ interface MenuManagementProps {
   onAddMenuItem: (item: Omit<MenuItem, 'id'>) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
   onDeleteMenuItem: (id: string) => void;
-  onAddCategory: (name: string, type?: 'FOOD' | 'DRINK') => void;
+  onAddCategory: (name: string, type?: 'FOOD' | 'DRINK', taxType?: 'VAT' | 'GST' | 'MRP') => void;
   onUpdateCategory: (cat: Category) => void;
   onDeleteCategory: (id: string) => void;
   onAddTable: (name: string, floorId?: string) => void;
@@ -530,7 +530,28 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                      />
                    </div>
 
-                   <hr className="my-6 border-gray-200" />
+                    <div>
+                      <label className="block text-sm font-black text-gray-900 mb-2 uppercase">VAT Number</label>
+                      <input 
+                       type="text" 
+                       value={localRestaurantInfo.vatNo || ''} 
+                       onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, vatNo: e.target.value})}
+                       placeholder="e.g., VAT-123456"
+                       className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-black text-gray-900 mb-2 uppercase">FSSAI Number</label>
+                      <input 
+                       type="text" 
+                       value={localRestaurantInfo.fssaiNo || ''} 
+                       onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, fssaiNo: e.target.value})}
+                       placeholder="e.g., 12345678901234"
+                       className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                      />
+                    </div>
+
+                    <hr className="my-6 border-gray-200" />
                    <h4 className="text-lg font-black text-gray-900 mb-4">Printer Setup</h4>
                    <div>
                      <label className="block text-sm font-black text-gray-900 mb-2 uppercase">KOT Printer IP</label>
@@ -904,10 +925,11 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 const formData = new FormData(e.currentTarget);
                 const name = formData.get('catName') as string;
                 const type = formData.get('catType') as 'FOOD' | 'DRINK';
+                const taxType = formData.get('taxType') as 'VAT' | 'GST' | 'MRP';
                 if (editingCat) {
-                  onUpdateCategory({ ...editingCat, name, type });
+                  onUpdateCategory({ ...editingCat, name, type, taxType });
                 } else {
-                  onAddCategory(name, type);
+                  onAddCategory(name, type, taxType);
                 }
                 setIsCatModalOpen(false);
               }}
@@ -923,14 +945,15 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category Type</label>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Tax Type</label>
                 <select 
-                  name="catType"
-                  defaultValue={editingCat?.type || 'FOOD'}
+                  name="taxType"
+                  defaultValue={editingCat?.taxType || (editingCat?.type === 'DRINK' ? 'VAT' : 'GST')}
                   className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner appearance-none cursor-pointer"
                 >
-                  <option value="FOOD">Food</option>
-                  <option value="DRINK">Drink</option>
+                  <option value="GST">GST</option>
+                  <option value="VAT">VAT</option>
+                  <option value="MRP">MRP (Inc. Tax)</option>
                 </select>
               </div>
               <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
@@ -954,10 +977,12 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const name = formData.get('catName') as string;
+                const type = formData.get('billSection') as 'FOOD' | 'DRINK';
+                const taxType = formData.get('taxType') as 'VAT' | 'GST' | 'MRP';
                 if (editingDrinkCat) {
-                  onUpdateCategory({ ...editingDrinkCat, name, type: 'DRINK' });
+                  onUpdateCategory({ ...editingDrinkCat, name, type, taxType });
                 } else {
-                  onAddCategory(name, 'DRINK');
+                  onAddCategory(name, type, taxType);
                 }
                 setIsDrinkCatModalOpen(false);
               }}
@@ -966,6 +991,29 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
               <div>
                 <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Category Name</label>
                 <input name="catName" defaultValue={editingDrinkCat?.name} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+              </div>
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Bill Section</label>
+                <select 
+                  name="billSection"
+                  defaultValue={editingDrinkCat?.type || 'DRINK'}
+                  className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner appearance-none cursor-pointer"
+                >
+                  <option value="DRINK">Drinks Section</option>
+                  <option value="FOOD">Food Section</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Tax Type</label>
+                <select 
+                  name="taxType"
+                  defaultValue={editingDrinkCat?.taxType || 'VAT'}
+                  className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner appearance-none cursor-pointer"
+                >
+                  <option value="VAT">VAT</option>
+                  <option value="GST">GST</option>
+                  <option value="MRP">MRP (Inc. Tax)</option>
+                </select>
               </div>
               <button type="submit" className="w-full bg-[#F57C00] text-white py-4 rounded-2xl font-black text-xl shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95">
                 {editingDrinkCat ? 'Update Category' : 'Create Category'}

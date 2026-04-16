@@ -62,7 +62,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, onResetCounter }) => {
       .slice(0, 5); // Top 5 categories
 
     // Payment Mode Distribution
-    const paymentCounts: Record<string, number> = { 'CASH': 0, 'CARD': 0, 'UPI': 0, 'DUE': 0, 'PART': 0 };
+    const paymentCounts: Record<string, number> = { 'CASH': 0, 'CARD': 0, 'UPI': 0, 'DUE': 0, 'PART': 0, 'OTHER': 0 };
     orders.filter(o => o.status !== 'CANCELLED').forEach(order => {
       paymentCounts[order.paymentMode] = (paymentCounts[order.paymentMode] || 0) + 1;
     });

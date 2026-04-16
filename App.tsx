@@ -794,9 +794,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddCategory = async (name: string, type?: 'FOOD' | 'DRINK') => {
+  const handleAddCategory = async (name: string, type?: 'FOOD' | 'DRINK', taxType?: 'VAT' | 'GST' | 'MRP') => {
     const newId = Math.random().toString(36).substr(2, 9);
-    const newCat = { id: newId, name, type: type || 'FOOD' };
+    const newCat = { id: newId, name, type: type || 'FOOD', taxType: taxType || (type === 'DRINK' ? 'VAT' : 'GST') };
     try {
       await set(ref(db, userPath(`categories/${newId}`)), newCat);
     } catch (error) {
@@ -952,10 +952,15 @@ const App: React.FC = () => {
     }
     const items = cart.items;
     const subtotal = items.reduce((sum, it) => sum + (it.price || 0) * (it.quantity || 0), 0);
-    const taxAmount = subtotal * taxRate;
-    const total = subtotal + taxAmount;
     const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
     const customerName = cart.customerName || 'Guest';
+    const discountPercent = 0; // Default for table previews unless we add a UI for it later
+    const discountAmount = subtotal * (discountPercent / 100);
+    const discountedSubtotal = subtotal - discountAmount;
+    
+    // Proportional tax recalculation
+    const taxAmount = (subtotal * taxRate) * (discountedSubtotal / (subtotal || 1));
+    const total = discountedSubtotal + taxAmount;
 
     // iframe print
     const iframe = document.createElement('iframe');
@@ -1005,32 +1010,98 @@ const App: React.FC = () => {
           <div class="center header-name">${restaurantInfo.name}</div>
           <div class="center">${restaurantInfo.address}</div>
           <div class="center">Tel: ${restaurantInfo.phone}</div>
-          ${restaurantInfo.gstNo ? `<div class="center" style="font-size:10px;">GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
           <div class="line"></div>
+          <div class="center bold" style="font-size: 16px; margin: 5px 0;">TAX INVOICE</div>
+          <div class="line"></div>
+          <div>Invoice No: INV-${billCounter + 1}</div>
           <div>Table: ${tableName}</div>
           ${customerName && customerName !== 'Guest' ? `<div>Cust: ${customerName}</div>` : ''}
           <div>Date: ${new Date().toLocaleDateString()}</div>
           <div>Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
           <div>Type: DINE IN</div>
           <div class="line"></div>
-          <div class="row bold">
-            <span class="item-name">Item</span>
-            <span class="qty">Qty</span>
-            <span class="amt">Amt</span>
-          </div>
-          ${items.map(it => `
-            <div class="row">
-              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}${(it as any).selectedMl ? ` (${(it as any).selectedMl})` : ''}</span>
-              <span class="qty">${it.quantity}</span>
-              <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-            </div>
-          `).join('')}
+          
+          <!-- Food Items Section -->
+          ${(() => {
+            const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+            const isDrinkCat = (catId: string) => {
+              const cat = categories.find(c => String(c.id) === String(catId));
+              return cat ? (cat.type === 'DRINK' || (!cat.type && drinkNamePattern.test(cat.name || ''))) : false;
+            };
+            const foodItems = items.filter(it => !isDrinkCat(it.categoryId));
+            if (foodItems.length === 0) return '';
+            const foodSub = foodItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+            return `
+              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- FOOD ITEMS ---</div>
+              <div class="row bold">
+                <span class="item-name">Item</span>
+                <span class="qty">Qty</span>
+                <span class="amt">Amt</span>
+              </div>
+              ${foodItems.map(it => `
+                <div class="row">
+                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                  <span class="qty">${it.quantity}</span>
+                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                </div>
+              `).join('')}
+              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+                <span>FOOD TOTAL:</span>
+                <span>Rs ${foodSub.toFixed(0)}</span>
+              </div>
+              <div style="height: 8px;"></div>
+            `;
+          })()}
+
+          <!-- Drink Items Section -->
+          ${(() => {
+            const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+            const isDrinkCat = (catId: string) => {
+              const cat = categories.find(c => String(c.id) === String(catId));
+              return cat ? (cat.type === 'DRINK' || (!cat.type && drinkNamePattern.test(cat.name || ''))) : false;
+            };
+            const drinkItems = items.filter(it => isDrinkCat(it.categoryId));
+            if (drinkItems.length === 0) return '';
+            const drinkSub = drinkItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+            return `
+              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- DRINK ITEMS ---</div>
+              <div class="row bold">
+                <span class="item-name">Item</span>
+                <span class="qty">Qty</span>
+                <span class="amt">Amt</span>
+              </div>
+              ${drinkItems.map(it => `
+                <div class="row">
+                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                  <span class="qty">${it.quantity}</span>
+                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                </div>
+              `).join('')}
+              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+                <span>DRINKS TOTAL:</span>
+                <span>Rs ${drinkSub.toFixed(0)}</span>
+              </div>
+              <div style="height: 8px;"></div>
+            `;
+          })()}
+
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${subtotal.toFixed(0)}</span></div>
+          ${discountAmount > 0 ? `
+            <div class="row">
+              <span>Discount (${discountPercent}%):</span>
+              <span>-Rs ${discountAmount.toFixed(0)}</span>
+            </div>
+          ` : ''}
           <div class="row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
-          <div class="row bold total-section"><span>TOTAL:</span><span>Rs ${total.toFixed(0)}</span></div>
+          <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center bold">Not Paid Yet</div>
+          <div style="margin-top: 10px; font-size: 12px; font-weight: 900;">
+            ${restaurantInfo.gstNo && restaurantInfo.gstNo !== 'NOT SET' ? `<div>GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
+            ${restaurantInfo.vatNo && restaurantInfo.vatNo !== 'NOT SET' ? `<div>VAT NO: ${restaurantInfo.vatNo}</div>` : ''}
+            ${restaurantInfo.fssaiNo && restaurantInfo.fssaiNo !== 'NOT SET' ? `<div>FSSAI NO: ${restaurantInfo.fssaiNo}</div>` : ''}
+          </div>
           <div class="footer center">
             <p class="bold">Thank you!</p>
             <p class="bold">Visit again.</p>
@@ -1103,7 +1174,7 @@ const App: React.FC = () => {
 
               const newOrder: Order = {
                 id: Math.random().toString(36).substr(2, 9),
-                billNo: `INV-${Date.now().toString().substr(-6)}`,
+                billNo: `INV-${billCounter + 1}`,
                 customerName,
                 tableId,
                 tableName,
@@ -1142,6 +1213,7 @@ const App: React.FC = () => {
             onCreateOrder={handleCreateOrder}
             onUpdateTableStatus={handleUpdateTableStatus}
             onUpdateTableCarts={handleUpdateTableCarts}
+            billCounter={billCounter}
             variant="desktop"
             selectedTableId={selectedTableId}
             onBackToTables={() => {

@@ -23,7 +23,10 @@ import {
   Banknote,
   Smartphone,
   Trash2,
-  Download
+  Download,
+  Users,
+  ArrowLeft,
+  Wallet
 } from 'lucide-react';
 import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
 
@@ -581,11 +584,13 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                     order.paymentMode === 'CARD' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
                     order.paymentMode === 'UPI' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                     order.paymentMode === 'DUE' ? 'bg-red-50 text-red-700 border-red-200' :
+                    order.paymentMode === 'OTHER' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                     'bg-gray-50 text-gray-700 border-gray-200'
                   }`}>
                     {order.paymentMode === 'CASH' && <Banknote size={10} />}
                     {order.paymentMode === 'CARD' && <CreditCard size={10} />}
                     {order.paymentMode === 'UPI' && <Smartphone size={10} />}
+                    {order.paymentMode === 'OTHER' && <Wallet size={10} />}
                     {order.paymentMode}
                   </span>
                 </td>
@@ -687,6 +692,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                 <option value="CARD">Card</option>
                 <option value="UPI">UPI</option>
                 <option value="DUE">Due</option>
+                <option value="OTHER">Others</option>
               </select>
               <select
                 value={monthFilter}
@@ -1029,6 +1035,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
                       {selectedOrder.paymentMode === 'CASH' && <Banknote size={14} />}
                       {selectedOrder.paymentMode === 'CARD' && <CreditCard size={14} />}
                       {selectedOrder.paymentMode === 'UPI' && <Smartphone size={14} />}
+                      {selectedOrder.paymentMode === 'OTHER' && <Wallet size={14} />}
                       {selectedOrder.paymentMode}
                     </div>
                     <StatusBadge status={selectedOrder.status} />
