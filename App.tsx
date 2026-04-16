@@ -1093,6 +1093,8 @@ const App: React.FC = () => {
               <span>-Rs ${discountAmount.toFixed(0)}</span>
             </div>
           ` : ''}
+          ${gstAmount > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${gstAmount.toFixed(0)}</span></div>` : ''}
+          ${vatAmount > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${vatAmount.toFixed(0)}</span></div>` : ''}
           <div class="row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
           <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${total.toFixed(0)}</span></div>
           <div class="line"></div>
