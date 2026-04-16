@@ -714,8 +714,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               <span>-Rs ${order.discountAmount.toFixed(0)}</span>
             </div>
           ` : ''}
-          ${orderGst > 0 ? `<div class="row"><span>GST:</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
-          ${orderVat > 0 ? `<div class="row"><span>VAT:</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
+          ${orderGst > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
+          ${orderVat > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
           <div class="row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
           <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
@@ -1645,11 +1645,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   </div>
                 )}
                 <div className="flex justify-between text-gray-400 font-medium">
-                  <span>GST (Food)</span>
+                  <span>GST (Food ${(taxRate * 100).toFixed(0)}%)</span>
                   <span>₹{gst.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-400 font-medium">
-                  <span>VAT (Drinks)</span>
+                  <span>VAT (Drinks ${(drinkTaxRate * 100).toFixed(0)}%)</span>
                   <span>₹{vat.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-400 font-medium">
