@@ -22,6 +22,7 @@ import {
   Truck,
   Package,
   UtensilsCrossed,
+  Utensils,
   Users,
   ArrowLeft,
   Wallet
@@ -290,6 +291,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [discountType, setDiscountType] = useState<'FIXED' | 'PERCENT'>('PERCENT');
   const [showBillDetails, setShowBillDetails] = useState(false);
+  const [openItemModal, setOpenItemModal] = useState<{ isOpen: boolean, type: 'FOOD' | 'DRINK' | null }>({ isOpen: false, type: null });
+  const [openItemForm, setOpenItemForm] = useState({ name: '', rate: '' });
   const mobileItemsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileBillScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -304,13 +307,19 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       byId.set(String(category.id), isDrink);
     });
 
-    return (categoryId: string) => byId.get(String(categoryId)) === true;
+    return (categoryId: string) => categoryId === 'OPEN_BAR' || byId.get(String(categoryId)) === true;
   }, [categories]);
   
   const filteredCategories = useMemo(() => {
-    return categories.filter(cat => 
+    const list = categories.filter(cat => 
       menuType === 'DRINK' ? cat.type === 'DRINK' : (!cat.type || cat.type === 'FOOD')
     );
+    
+    // Add virtual "Open" categories at the end of both views
+    list.push({ id: 'VIRTUAL-OPEN-FOOD', name: 'Open Food', type: 'FOOD' });
+    list.push({ id: 'VIRTUAL-OPEN-BAR', name: 'Open Bar', type: 'DRINK' });
+    
+    return list;
   }, [categories, menuType]);
 
   // Ensure selectedCategoryId is always valid when categories change
@@ -379,6 +388,87 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       );
     }
     // Filter by category - items must have a matching categoryId to appear
+    if (selectedCategoryId === 'VIRTUAL-OPEN-FOOD') {
+      return [
+        {
+          id: 'manual-open-food',
+          name: 'Open Food',
+          price: 0,
+          categoryId: 'VIRTUAL-OPEN-FOOD',
+          vegType: 'VEG',
+          nonVegPrice: 0,
+          vegPrice: 0,
+          mlPrices: {},
+          hasPortions: false,
+          halfPrice: 0
+        },
+        {
+          id: 'db-lunch-special',
+          name: 'Lunch',
+          price: 750,
+          categoryId: 'VIRTUAL-OPEN-FOOD',
+          vegType: 'VEG',
+          nonVegPrice: 0,
+          vegPrice: 0,
+          mlPrices: {},
+          hasPortions: false,
+          halfPrice: 0
+        },
+        {
+          id: 'db-permit-fee-food',
+          name: 'Permit',
+          price: 5,
+          categoryId: 'VIRTUAL-OPEN-FOOD',
+          vegType: 'VEG',
+          nonVegPrice: 0,
+          vegPrice: 0,
+          mlPrices: {},
+          hasPortions: false,
+          halfPrice: 0
+        }
+      ] as MenuItem[];
+    }
+    if (selectedCategoryId === 'VIRTUAL-OPEN-BAR') {
+      return [
+        {
+          id: 'manual-open-bar',
+          name: 'Open Bar',
+          price: 0,
+          categoryId: 'VIRTUAL-OPEN-BAR',
+          vegType: 'VEG',
+          nonVegPrice: 0,
+          vegPrice: 0,
+          mlPrices: {},
+          hasPortions: false,
+          halfPrice: 0
+        },
+        {
+          id: 'db-permit-fee',
+          name: 'Permit',
+          price: 5,
+          categoryId: 'VIRTUAL-OPEN-BAR',
+          vegType: 'VEG',
+          nonVegPrice: 0,
+          vegPrice: 0,
+          mlPrices: {},
+          hasPortions: false,
+          halfPrice: 0
+        },
+        {
+          id: 'db-lunch-special-bar',
+          name: 'Lunch',
+          price: 750,
+          categoryId: 'VIRTUAL-OPEN-BAR',
+          vegType: 'VEG',
+          nonVegPrice: 0,
+          vegPrice: 0,
+          mlPrices: {},
+          hasPortions: false,
+          halfPrice: 0
+        }
+      ] as MenuItem[];
+    }
+
     const filtered = menuItems.filter(
       item => item && item.categoryId && String(item.categoryId) === String(selectedCategoryId)
     );
@@ -388,12 +478,52 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
 
   const handleAddItem = (item: MenuItem) => {
+    // If it's a manual open item, trigger modal instead of adding directly
+    if (item.id === 'manual-open-food') {
+      setOpenItemModal({ isOpen: true, type: 'FOOD' });
+      return;
+    }
+    if (item.id === 'manual-open-bar') {
+      setOpenItemModal({ isOpen: true, type: 'DRINK' });
+      return;
+    }
+
     // If item has both veg/non-veg options OR portions OR ML sizes, show popup
     if (item.vegType === 'BOTH' || item.hasPortions || (item.mlPrices && Object.keys(item.mlPrices).length > 0)) {
       setOptionsItem(item);
       return;
     }
     addToCart(item);
+  };
+
+  const handleOpenItemSubmit = () => {
+    if (!openItemForm.name || !openItemForm.rate) {
+      alert("Please enter Name and Rate");
+      return;
+    }
+    const rateFloat = parseFloat(openItemForm.rate);
+    if (isNaN(rateFloat)) {
+      alert("Invalid Rate");
+      return;
+    }
+
+    const timestamp = Date.now();
+    const mockItem: MenuItem = {
+      id: `open-${openItemModal.type}-${timestamp}`,
+      name: openItemForm.name,
+      price: rateFloat,
+      categoryId: openItemModal.type === 'DRINK' ? 'OPEN_BAR' : 'OPEN_FOOD',
+      vegType: 'VEG',
+      nonVegPrice: 0,
+      vegPrice: 0,
+      mlPrices: {},
+      hasPortions: false,
+      halfPrice: 0
+    };
+
+    addToCart(mockItem);
+    setOpenItemModal({ isOpen: false, type: null });
+    setOpenItemForm({ name: '', rate: '' });
   };
 
   const handleItemOptions = (vegChoice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null, mlChoice?: string | null) => {
@@ -1706,6 +1836,65 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         </div>
       </div>
       </div>
+      {/* Open Item Modal */}
+      {openItemModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className={`p-6 ${openItemModal.type === 'DRINK' ? 'bg-gray-900' : 'bg-orange-600'} text-white`}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-black uppercase tracking-tight">Add Open {openItemModal.type === 'DRINK' ? 'Bar' : 'Food'}</h3>
+                  <p className="text-xs font-bold opacity-80 uppercase mt-1 tracking-widest">Manual Item Entry</p>
+                </div>
+                <button 
+                  onClick={() => setOpenItemModal({ isOpen: false, type: null })}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Item Name</label>
+                <input 
+                  autoFocus
+                  type="text"
+                  placeholder="e.g. Special Platter"
+                  value={openItemForm.name}
+                  onChange={(e) => setOpenItemForm({...openItemForm, name: e.target.value})}
+                  className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl px-5 py-4 text-lg font-bold text-gray-900 focus:ring-4 focus:ring-orange-50 focus:border-orange-500 outline-none transition-all placeholder:text-gray-300"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Rate (₹)</label>
+                <div className="relative">
+                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-xl font-black text-gray-400">₹</span>
+                  <input 
+                    type="number"
+                    placeholder="0"
+                    value={openItemForm.rate}
+                    onChange={(e) => setOpenItemForm({...openItemForm, rate: e.target.value})}
+                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl pl-10 pr-5 py-4 text-2xl font-black text-gray-900 focus:ring-4 focus:ring-orange-50 focus:border-orange-500 outline-none transition-all placeholder:text-gray-300"
+                    onKeyDown={(e) => e.key === 'Enter' && handleOpenItemSubmit()}
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleOpenItemSubmit}
+                className={`w-full py-5 rounded-2xl font-black text-white text-lg shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] ${
+                  openItemModal.type === 'DRINK' ? 'bg-gray-900 hover:bg-black' : 'bg-orange-600 hover:bg-orange-700'
+                }`}
+              >
+                ADD TO BILL
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

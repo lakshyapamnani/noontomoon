@@ -52,6 +52,8 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMode | 'ALL'>('ALL');
   const [monthFilter, setMonthFilter] = useState<string>('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [showCsvMenu, setShowCsvMenu] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   
@@ -94,9 +96,17 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       ? (activeTab === 'TODAY' ? todayOrders : allOrders) 
       : safeOrders;
 
-    // Month filter
-    if (monthFilter !== 'ALL') {
+    // Month filter - only if dates are not specified
+    if (monthFilter !== 'ALL' && !startDate && !endDate) {
       list = list.filter(o => o.date && o.date.startsWith(monthFilter));
+    }
+
+    // Custom Date Range filter
+    if (startDate) {
+      list = list.filter(o => o.date && o.date >= startDate);
+    }
+    if (endDate) {
+      list = list.filter(o => o.date && o.date <= endDate);
     }
       
     const paymentFiltered = paymentFilter !== 'ALL'
@@ -109,7 +119,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       o.billNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
       o.customerName?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery, paymentFilter, monthFilter]);
+  }, [isAllBillsView, activeTab, todayOrders, allOrders, safeOrders, searchQuery, paymentFilter, monthFilter, startDate, endDate]);
 
   // Calculate total sale for displayed orders
   const totalSale = useMemo(() => {
@@ -682,6 +692,24 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
               className="bg-white border rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-[#F57C00] outline-none w-full md:w-48 md:focus:w-64 transition-all"
              />
            </div>
+           <div className="flex items-center gap-1.5 bg-white border rounded-xl px-2">
+              <span className="text-[9px] font-black text-gray-400 uppercase ml-1">From</span>
+              <input 
+                type="date" 
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent border-none py-2 text-xs font-bold text-gray-800 focus:ring-0 outline-none w-28 cursor-pointer"
+              />
+           </div>
+           <div className="flex items-center gap-1.5 bg-white border rounded-xl px-2">
+              <span className="text-[9px] font-black text-gray-400 uppercase ml-1">To</span>
+              <input 
+                type="date" 
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent border-none py-2 text-xs font-bold text-gray-800 focus:ring-0 outline-none w-28 cursor-pointer"
+              />
+           </div>
             <select
                 value={paymentFilter}
                 onChange={(e) => setPaymentFilter(e.target.value as PaymentMode | 'ALL')}
@@ -845,13 +873,19 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           </select>
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              let label = activeTab === 'TODAY' ? 'Today' : 'History';
+              if (startDate || endDate) {
+                label = `${startDate || 'Start'} to ${endDate || 'End'}`;
+              } else if (monthFilter !== 'ALL') {
+                label = monthFilter;
+              }
               exportKOTSummary(
                 displayedOrders,
-                activeTab === 'TODAY' ? 'Today' : 'History',
+                label,
                 kotCategoryId as 'all' | string
-              )
-            }
+              );
+            }}
             disabled={displayedOrders.length === 0}
             className="bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-black transition-all flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
