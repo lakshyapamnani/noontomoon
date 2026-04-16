@@ -9,9 +9,10 @@ import { COLORS, INITIAL_CATEGORIES } from '../constants';
 
 interface DashboardProps {
   orders: Order[];
+  onResetCounter?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ orders }) => {
+const Dashboard: React.FC<DashboardProps> = ({ orders, onResetCounter }) => {
   const stats = useMemo(() => {
     const now = new Date();
     const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -92,9 +93,24 @@ const Dashboard: React.FC<DashboardProps> = ({ orders }) => {
           <h1 className="text-xl md:text-2xl font-bold text-gray-800">Analytics Dashboard</h1>
           <p className="text-xs md:text-sm text-gray-500">Real-time performance metrics</p>
         </div>
-        <div className="bg-white px-3 py-1.5 rounded-xl shadow-sm border text-xs font-bold text-gray-600 flex items-center gap-2 self-start sm:self-auto">
-          <Clock size={14} className="text-[#F57C00]" />
-          Last Sync: {new Date().toLocaleTimeString()}
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          {onResetCounter && (
+            <button
+              onClick={() => {
+                if (window.confirm("Are you sure you want to start a new day? This will reset the invoice number to 1.")) {
+                  onResetCounter();
+                }
+              }}
+              className="bg-orange-50 text-[#F57C00] px-4 py-2 rounded-xl border border-orange-100 shadow-sm text-xs font-black transition-all hover:bg-[#F57C00] hover:text-white flex items-center gap-2"
+            >
+              <TrendingUp size={14} />
+              START NEW DAY
+            </button>
+          )}
+          <div className="bg-white px-3 py-1.5 rounded-xl shadow-sm border text-xs font-bold text-gray-600 flex items-center gap-2">
+            <Clock size={14} className="text-[#F57C00]" />
+            Last Sync: {new Date().toLocaleTimeString()}
+          </div>
         </div>
       </div>
 
