@@ -1336,7 +1336,6 @@ const App: React.FC = () => {
         onUpdateTableStatus={handleUpdateTableStatus}
         onUpdateTableCarts={handleUpdateTableCarts}
         variant="mobile"
-        printerSettings={printerSettings}
       />
     );
   };
