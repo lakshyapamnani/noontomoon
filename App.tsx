@@ -1,15 +1,15 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutDashboard, 
-  Receipt, 
-  ShoppingBag, 
-  Settings, 
-  LogOut, 
-  ChevronRight, 
-  Menu as MenuIcon, 
-  Bell, 
-  Printer, 
+import {
+  LayoutDashboard,
+  Receipt,
+  ShoppingBag,
+  Settings,
+  LogOut,
+  ChevronRight,
+  Menu as MenuIcon,
+  Bell,
+  Printer,
   FileText,
   BarChart3,
   Clock,
@@ -25,19 +25,19 @@ import {
   LayoutGrid,
   TrendingUp
 } from 'lucide-react';
-import { 
-  MenuItem, 
-  Category, 
-  Order, 
-  OrderStatus, 
+import {
+  MenuItem,
+  Category,
+  Order,
+  OrderStatus,
   RestaurantInfo,
   Table,
   Floor,
   PrinterSettings
 } from './types';
-import { 
-  INITIAL_CATEGORIES, 
-  INITIAL_MENU_ITEMS, 
+import {
+  INITIAL_CATEGORIES,
+  INITIAL_MENU_ITEMS,
   TAX_RATE as INITIAL_TAX_RATE,
   DRINK_TAX_RATE as INITIAL_DRINK_TAX_RATE,
   INITIAL_RESTAURANT_INFO
@@ -54,14 +54,14 @@ import { db, auth } from './firebase';
 import { ref, onValue, set, push, update, get } from 'firebase/database';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 
-type ActiveScreen = 
+type ActiveScreen =
   | 'TABLES'
-  | 'BILLING' 
-  | 'DASHBOARD' 
-  | 'LIVE_ORDERS' 
-  | 'COMPLETED_ORDERS' 
-  | 'CANCELLED_ORDERS' 
-  | 'REPORTS' 
+  | 'BILLING'
+  | 'DASHBOARD'
+  | 'LIVE_ORDERS'
+  | 'COMPLETED_ORDERS'
+  | 'CANCELLED_ORDERS'
+  | 'REPORTS'
   | 'MENU_CONFIG'
   | 'ALL_ORDERS';
 
@@ -109,7 +109,7 @@ const App: React.FC = () => {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
-  
+
   // States with Local Storage fallback
   const [categories, setCategories] = useState<Category[]>(() => {
     const saved = localStorage.getItem('drona_categories');
@@ -158,7 +158,7 @@ const App: React.FC = () => {
   };
 
   const sortTables = (tableArray: Table[]) => {
-    return [...tableArray].sort((a, b) => 
+    return [...tableArray].sort((a, b) =>
       (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' })
     );
   };
@@ -194,13 +194,13 @@ const App: React.FC = () => {
       const path = window.location.pathname.toLowerCase();
       setIsMobileRoute(path === '/mobile' || path === '/mobile/' || path.startsWith('/mobile'));
     };
-    
+
     // Check on mount as well
     const path = window.location.pathname.toLowerCase();
     if (path === '/mobile' || path === '/mobile/' || path.startsWith('/mobile')) {
       setIsMobileRoute(true);
     }
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('popstate', handlePopState);
@@ -357,10 +357,10 @@ const App: React.FC = () => {
             const taxRateVal = savedTax ? parseFloat(savedTax) : INITIAL_TAX_RATE;
             const savedDrinkTax = localStorage.getItem('drona_drink_tax_rate');
             const drinkTaxRateVal = savedDrinkTax ? parseFloat(savedDrinkTax) : 0;
-            const restaurantVal = { 
-              name: user?.displayName || 'NOON TO MOON CAFE', 
-              phone: '+91 9876543210', 
-              address: '123 Main Street, Food Park, City' 
+            const restaurantVal = {
+              name: user?.displayName || 'NOON TO MOON CAFE',
+              phone: '+91 9876543210',
+              address: '123 Main Street, Food Park, City'
             };
             await set(settingsRef, { taxRate: taxRateVal, drinkTaxRate: drinkTaxRateVal, restaurantInfo: restaurantVal });
             console.log('Settings (taxes, restaurant) synced to Firebase');
@@ -573,7 +573,7 @@ const App: React.FC = () => {
   // Action Handlers - Firebase is the single source of truth for orders
   const handleCreateOrder = async (order: Order) => {
     console.log("Creating order:", order);
-    
+
     // Get current counter from Firebase to ensure consistency
     let currentCounter = billCounter;
     try {
@@ -584,13 +584,13 @@ const App: React.FC = () => {
     } catch {
       // Fallback to local state
     }
-    
+
     const newCounter = currentCounter + 1;
     order.billNo = `INV-${newCounter}`;
-    
+
     // Clean the order object - remove undefined values (Firebase doesn't accept undefined)
     const cleanOrder = JSON.parse(JSON.stringify(order));
-    
+
     try {
       // Save order and update counter atomically
       await set(ref(db, userPath(`orders/${order.id}`)), cleanOrder);
@@ -618,6 +618,17 @@ const App: React.FC = () => {
       await set(ref(db, userPath(`orders/${orderId}`)), null);
     } catch (error) {
       console.error("Firebase Error (Delete Order):", error);
+    }
+  };
+
+  const handleResetBillCounter = async () => {
+    try {
+      await set(ref(db, userPath('bill_counter')), 0);
+      setBillCounter(0);
+      console.log("Bill counter reset to 0 in Firebase");
+    } catch (error) {
+      console.error("Firebase Error (Reset Counter):", error);
+      alert("Failed to reset counter. Please check your connection.");
     }
   };
 
@@ -709,7 +720,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTableStatus = async (tableId: string, status: Table['status'], currentOrderId?: string) => {
-    const updatedTables = tables.map(t => 
+    const updatedTables = tables.map(t =>
       t.id === tableId ? { ...t, status, currentOrderId } : t
     );
     setTables(updatedTables);
@@ -729,9 +740,9 @@ const App: React.FC = () => {
       alert("Please select a category for the menu item. Items without a category won't appear on the billing screen.");
       return;
     }
-    
+
     const newId = Math.random().toString(36).substr(2, 9);
-    
+
     // Build clean item - Firebase doesn't accept undefined; ensure categoryId is always included
     const cleanItem: Record<string, unknown> = {
       id: newId,
@@ -745,7 +756,7 @@ const App: React.FC = () => {
     if (item.nonVegPrice !== undefined && item.nonVegPrice !== null) cleanItem.nonVegPrice = item.nonVegPrice;
     if (item.image) cleanItem.image = item.image;
     if (item.mlPrices && Object.keys(item.mlPrices).length > 0) cleanItem.mlPrices = item.mlPrices;
-    
+
     console.log("App.tsx - Adding menu item:", cleanItem);
     try {
       await set(ref(db, userPath(`menu_items/${newId}`)), cleanItem);
@@ -764,7 +775,7 @@ const App: React.FC = () => {
         cleanItem[key] = value;
       }
     });
-    
+
     console.log("App.tsx - Updating menu item:", cleanItem);
     try {
       await set(ref(db, userPath(`menu_items/${updatedItem.id}`)), cleanItem);
@@ -865,23 +876,23 @@ const App: React.FC = () => {
       // Clear old categories and menu items from Firebase
       await set(ref(db, userPath('categories')), null);
       await set(ref(db, userPath('menu_items')), null);
-      
+
       // Sync all new categories to Firebase
       for (const cat of INITIAL_CATEGORIES) {
         await set(ref(db, userPath(`categories/${cat.id}`)), cat);
       }
-      
+
       // Sync all new menu items to Firebase
       for (const item of INITIAL_MENU_ITEMS) {
         await set(ref(db, userPath(`menu_items/${item.id}`)), item);
       }
-      
+
       // Update local state
       setCategories(INITIAL_CATEGORIES);
       setMenuItems(INITIAL_MENU_ITEMS);
       localStorage.setItem('drona_categories', JSON.stringify(INITIAL_CATEGORIES));
       localStorage.setItem('drona_menu_items', JSON.stringify(INITIAL_MENU_ITEMS));
-      
+
       alert('Menu database reset successfully with new menu!');
     } catch (error) {
       console.error('Error resetting menu database:', error);
@@ -895,13 +906,13 @@ const App: React.FC = () => {
       // Clear menu items and categories
       await set(ref(db, userPath('menu_items')), null);
       await set(ref(db, userPath('categories')), null);
-      
+
       // Clear orders
       await set(ref(db, userPath('orders')), null);
-      
+
       // Clear table carts (pending orders on tables)
       await set(ref(db, userPath('table_carts')), null);
-      
+
       // Clear bill counter so next bill is INV-1
       await set(ref(db, userPath('bill_counter')), 0);
       setBillCounter(0);
@@ -916,7 +927,7 @@ const App: React.FC = () => {
       localStorage.setItem('drona_categories', JSON.stringify([]));
 
       localStorage.setItem('drona_table_carts', JSON.stringify({}));
-      
+
       // Reset tables currentOrderId and status if they are occupied
       const resetTables = tables.map(t => ({ ...t, status: 'AVAILABLE' as const, currentOrderId: undefined }));
       setTables(resetTables);
@@ -950,7 +961,7 @@ const App: React.FC = () => {
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
-    
+
     const iframeDoc = iframe.contentWindow?.document;
     if (!iframeDoc) {
       alert('Unable to create print frame.');
@@ -1088,7 +1099,7 @@ const App: React.FC = () => {
               const total = subtotal + tax;
 
               const d = new Date();
-              const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+              const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
               const newOrder: Order = {
                 id: Math.random().toString(36).substr(2, 9),
@@ -1119,9 +1130,9 @@ const App: React.FC = () => {
         );
       case 'BILLING':
         return (
-          <BillingScreen 
-            categories={categories} 
-            menuItems={menuItems} 
+          <BillingScreen
+            categories={categories}
+            menuItems={menuItems}
             taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             restaurantInfo={restaurantInfo}
             tables={tables}
@@ -1140,12 +1151,12 @@ const App: React.FC = () => {
           />
         );
       case 'DASHBOARD':
-        return <Dashboard orders={orders} />;
+        return <Dashboard orders={orders} onResetCounter={handleResetBillCounter} />;
       case 'LIVE_ORDERS':
         return (
-          <OrdersList 
-            title="Live Orders" 
-            orders={orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')} 
+          <OrdersList
+            title="Live Orders"
+            orders={orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED')}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
@@ -1167,9 +1178,9 @@ const App: React.FC = () => {
         );
       case 'COMPLETED_ORDERS':
         return (
-          <OrdersList 
-            title="Completed Orders" 
-            orders={orders.filter(o => o.status === 'COMPLETED')} 
+          <OrdersList
+            title="Completed Orders"
+            orders={orders.filter(o => o.status === 'COMPLETED')}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
@@ -1179,9 +1190,9 @@ const App: React.FC = () => {
         );
       case 'CANCELLED_ORDERS':
         return (
-          <OrdersList 
-            title="Cancelled Orders" 
-            orders={orders.filter(o => o.status === 'CANCELLED')} 
+          <OrdersList
+            title="Cancelled Orders"
+            orders={orders.filter(o => o.status === 'CANCELLED')}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
@@ -1193,8 +1204,8 @@ const App: React.FC = () => {
         return <Reports orders={orders} />;
       case 'MENU_CONFIG':
         return (
-          <MenuManagement 
-            categories={categories} 
+          <MenuManagement
+            categories={categories}
             menuItems={menuItems}
             taxRate={taxRate} drinkTaxRate={drinkTaxRate}
             restaurantInfo={restaurantInfo}
@@ -1238,9 +1249,9 @@ const App: React.FC = () => {
     }
 
     return (
-      <BillingScreen 
-        categories={categories} 
-        menuItems={menuItems} 
+      <BillingScreen
+        categories={categories}
+        menuItems={menuItems}
         taxRate={taxRate} drinkTaxRate={drinkTaxRate}
         restaurantInfo={restaurantInfo}
         tables={tables}
@@ -1339,16 +1350,15 @@ const App: React.FC = () => {
       )}
 
       {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity" 
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      <div 
-        className={`fixed inset-y-0 left-0 w-64 bg-[#262626] text-white z-50 transform transition-transform duration-300 ease-in-out ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+      <div
+        className={`fixed inset-y-0 left-0 w-64 bg-[#262626] text-white z-50 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="p-6 border-b border-gray-700 flex items-center gap-3">
           <div className="w-10 h-10 bg-[#F57C00] rounded-lg flex items-center justify-center font-bold text-xl">D</div>
@@ -1356,57 +1366,57 @@ const App: React.FC = () => {
         </div>
 
         <nav className="mt-4 flex-1 overflow-y-auto custom-scrollbar">
-          <SidebarItem 
-            icon={<Receipt size={20} />} 
+          <SidebarItem
+            icon={<Receipt size={20} />}
             label="Tables"
             active={activeScreen === 'TABLES'}
-            onClick={() => { setActiveScreen('TABLES'); setIsSidebarOpen(false); }} 
+            onClick={() => { setActiveScreen('TABLES'); setIsSidebarOpen(false); }}
           />
-          <SidebarItem 
-            icon={<BarChart3 size={20} />} 
-            label="Analytics Dashboard" 
-            active={activeScreen === 'DASHBOARD'} 
-            onClick={() => { setActiveScreen('DASHBOARD'); setIsSidebarOpen(false); }} 
+          <SidebarItem
+            icon={<BarChart3 size={20} />}
+            label="Analytics Dashboard"
+            active={activeScreen === 'DASHBOARD'}
+            onClick={() => { setActiveScreen('DASHBOARD'); setIsSidebarOpen(false); }}
           />
-          
+
           <div className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Orders</div>
-          <SidebarItem 
-            icon={<Layers size={20} />} 
-            label="All Bills" 
-            active={activeScreen === 'ALL_ORDERS'} 
-            onClick={() => { setActiveScreen('ALL_ORDERS'); setIsSidebarOpen(false); }} 
+          <SidebarItem
+            icon={<Layers size={20} />}
+            label="All Bills"
+            active={activeScreen === 'ALL_ORDERS'}
+            onClick={() => { setActiveScreen('ALL_ORDERS'); setIsSidebarOpen(false); }}
           />
-          <SidebarItem 
-            icon={<Clock size={20} />} 
-            label="Live Orders" 
-            active={activeScreen === 'LIVE_ORDERS'} 
-            onClick={() => { setActiveScreen('LIVE_ORDERS'); setIsSidebarOpen(false); }} 
+          <SidebarItem
+            icon={<Clock size={20} />}
+            label="Live Orders"
+            active={activeScreen === 'LIVE_ORDERS'}
+            onClick={() => { setActiveScreen('LIVE_ORDERS'); setIsSidebarOpen(false); }}
           />
-          <SidebarItem 
-            icon={<CheckCircle2 size={20} />} 
-            label="Completed Orders" 
-            active={activeScreen === 'COMPLETED_ORDERS'} 
-            onClick={() => { setActiveScreen('COMPLETED_ORDERS'); setIsSidebarOpen(false); }} 
+          <SidebarItem
+            icon={<CheckCircle2 size={20} />}
+            label="Completed Orders"
+            active={activeScreen === 'COMPLETED_ORDERS'}
+            onClick={() => { setActiveScreen('COMPLETED_ORDERS'); setIsSidebarOpen(false); }}
           />
-          <SidebarItem 
-            icon={<XCircle size={20} />} 
-            label="Cancelled Orders" 
-            active={activeScreen === 'CANCELLED_ORDERS'} 
-            onClick={() => { setActiveScreen('CANCELLED_ORDERS'); setIsSidebarOpen(false); }} 
+          <SidebarItem
+            icon={<XCircle size={20} />}
+            label="Cancelled Orders"
+            active={activeScreen === 'CANCELLED_ORDERS'}
+            onClick={() => { setActiveScreen('CANCELLED_ORDERS'); setIsSidebarOpen(false); }}
           />
 
           <div className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Business</div>
-          <SidebarItem 
-            icon={<FileSpreadsheet size={20} />} 
-            label="Reports" 
-            active={activeScreen === 'REPORTS'} 
-            onClick={() => { setActiveScreen('REPORTS'); setIsSidebarOpen(false); }} 
+          <SidebarItem
+            icon={<FileSpreadsheet size={20} />}
+            label="Reports"
+            active={activeScreen === 'REPORTS'}
+            onClick={() => { setActiveScreen('REPORTS'); setIsSidebarOpen(false); }}
           />
-          <SidebarItem 
-            icon={<Settings size={20} />} 
-            label="Configuration" 
-            active={activeScreen === 'MENU_CONFIG'} 
-            onClick={() => { setActiveScreen('MENU_CONFIG'); setIsSidebarOpen(false); }} 
+          <SidebarItem
+            icon={<Settings size={20} />}
+            label="Configuration"
+            active={activeScreen === 'MENU_CONFIG'}
+            onClick={() => { setActiveScreen('MENU_CONFIG'); setIsSidebarOpen(false); }}
           />
 
           <div className="mt-8 border-t border-gray-700">
@@ -1418,54 +1428,53 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white h-14 border-b flex items-center justify-between px-4 shrink-0 shadow-sm z-30">
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => setIsSidebarOpen(true)}
               className="p-2 hover:bg-gray-100 rounded-md transition-colors"
             >
               <MenuIcon size={24} className="text-gray-600" />
             </button>
             <div className="hidden md:flex items-center gap-2">
-               <span className="text-[#F57C00] font-bold text-lg">NOON TO MOON</span>
-               <div className="h-6 w-px bg-gray-200 mx-2"></div>
-               <button
-                 onClick={() => setActiveScreen('TABLES')}
-                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-sm transition-all ${
-                   activeScreen === 'TABLES' 
-                     ? 'bg-[#F57C00] text-white shadow-lg shadow-orange-200' 
-                     : 'bg-gray-100 text-gray-700 hover:bg-orange-50 hover:text-[#F57C00]'
-                 }`}
-               >
-                 <Receipt size={16} />
-                 <span>Tables</span>
-               </button>
-               <div className="h-6 w-px bg-gray-200 mx-1"></div>
-               <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-full border">
-                 {isOnline ? (
-                   <div className="flex items-center gap-1.5 text-green-600">
-                     <Cloud size={14} />
-                     <span className="text-[10px] font-black uppercase tracking-tighter">Live Sync</span>
-                   </div>
-                 ) : (
-                   <div className="flex items-center gap-1.5 text-red-500">
-                     <CloudOff size={14} />
-                     <span className="text-[10px] font-black uppercase tracking-tighter">Offline</span>
-                   </div>
-                 )}
-               </div>
+              <span className="text-[#F57C00] font-bold text-lg">NOON TO MOON</span>
+              <div className="h-6 w-px bg-gray-200 mx-2"></div>
+              <button
+                onClick={() => setActiveScreen('TABLES')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black text-sm transition-all ${activeScreen === 'TABLES'
+                    ? 'bg-[#F57C00] text-white shadow-lg shadow-orange-200'
+                    : 'bg-gray-100 text-gray-700 hover:bg-orange-50 hover:text-[#F57C00]'
+                  }`}
+              >
+                <Receipt size={16} />
+                <span>Tables</span>
+              </button>
+              <div className="h-6 w-px bg-gray-200 mx-1"></div>
+              <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-full border">
+                {isOnline ? (
+                  <div className="flex items-center gap-1.5 text-green-600">
+                    <Cloud size={14} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter">Live Sync</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-red-500">
+                    <CloudOff size={14} />
+                    <span className="text-[10px] font-black uppercase tracking-tighter">Offline</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1 sm:gap-4">
             <HeaderAction icon={<Printer size={20} />} tooltip="Printer Settings" />
-            <HeaderAction 
-              icon={<FileText size={20} />} 
-              tooltip="Reports" 
+            <HeaderAction
+              icon={<FileText size={20} />}
+              tooltip="Reports"
               onClick={() => setActiveScreen('REPORTS')}
             />
             <div className="relative">
-              <HeaderAction 
-                icon={<Bell size={20} />} 
-                tooltip="All Bills" 
+              <HeaderAction
+                icon={<Bell size={20} />}
+                tooltip="All Bills"
                 onClick={() => setActiveScreen('ALL_ORDERS')}
               />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
@@ -1493,11 +1502,10 @@ interface SidebarItemProps {
 }
 
 const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, active, onClick }) => (
-  <button 
+  <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-6 py-3.5 transition-colors ${
-      active ? 'bg-[#F57C00] text-white font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-800'
-    }`}
+    className={`w-full flex items-center gap-3 px-6 py-3.5 transition-colors ${active ? 'bg-[#F57C00] text-white font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+      }`}
   >
     {icon}
     <span className="flex-1 text-left">{label}</span>
@@ -1506,9 +1514,9 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, active, onClick 
 );
 
 const HeaderAction: React.FC<{ icon: React.ReactNode; tooltip: string; onClick?: () => void }> = ({ icon, tooltip, onClick }) => (
-  <button 
+  <button
     onClick={onClick}
-    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative group" 
+    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors relative group"
     title={tooltip}
   >
     {icon}
@@ -1526,11 +1534,10 @@ interface MobileNavItemProps {
 const MobileNavItem: React.FC<MobileNavItemProps> = ({ icon, label, active, onClick, badge }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center justify-center py-2 px-4 rounded-xl transition-all relative ${
-      active 
-        ? 'text-[#F57C00]' 
+    className={`flex flex-col items-center justify-center py-2 px-4 rounded-xl transition-all relative ${active
+        ? 'text-[#F57C00]'
         : 'text-gray-400'
-    }`}
+      }`}
   >
     <div className={`relative p-2 rounded-xl transition-all ${active ? 'bg-orange-100' : ''}`}>
       {icon}

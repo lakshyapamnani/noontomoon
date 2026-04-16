@@ -771,7 +771,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
 
-  const handlePlaceOrder = async (print = false) => {
+  const handlePlaceOrder = async (print = false, shouldCheckout = true) => {
     const selectedTableItems = selectedTableId
       ? toCartItemsArray(tableCarts[selectedTableId]?.items)
       : [];
@@ -809,11 +809,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
     const newOrder: Order = {
       id: Math.random().toString(36).substr(2, 9),
-      billNo: `INV-${Date.now().toString().substr(-6)}`,
+      billNo: `DRAFT-${Date.now().toString().substr(-6)}`, // Temporary bill no for drafts
       customerName: (customerName || "").trim() || "Guest",
       tableId: effectiveOrderType === 'DINE_IN' && selectedTableId ? selectedTableId : "",
       tableName: effectiveOrderType === 'DINE_IN' && selectedTable ? selectedTable.name : "",
-      date: dateStr, // YYYY-MM-DD for consistent "Today" filtering across app restarts
+      date: dateStr,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       items: [...checkoutItems],
       subtotal: checkoutSubtotal,
@@ -825,20 +825,20 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       status: 'COMPLETED'
     };
 
-    console.log("Placing order:", newOrder);
-    await onCreateOrder(newOrder);
-    console.log("onCreateOrder completed, real billNo:", newOrder.billNo);
+    if (shouldCheckout) {
+      console.log("Finalizing order:", newOrder);
+      await onCreateOrder(newOrder);
+      console.log("onCreateOrder completed, real billNo:", newOrder.billNo);
+    }
 
     if (print) {
       await printReceipt(newOrder);
     }
-    console.log("onCreateOrder called");
     
-    const selectedTableHasPendingItems =
-      !!selectedTableId && toCartItemsArray(tableCarts[selectedTableId]?.items).length > 0;
+    if (!shouldCheckout) return; // Exit if we only wanted to print
 
     // Checkout finalizes the order, clears cart context, and returns to tables.
-    if (selectedTableId && (orderType === 'DINE_IN' || selectedTableHasPendingItems)) {
+    if (selectedTableId && (orderType === 'DINE_IN' || (selectedTableId && toCartItemsArray(tableCarts[selectedTableId]?.items).length > 0))) {
       updateTableCart(selectedTableId, () => ({ items: [], customerName: '' }));
       onUpdateTableStatus(selectedTableId, 'AVAILABLE');
       setSelectedTableId(null);
@@ -850,7 +850,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     } else {
       setDefaultCart([]);
       setDefaultCustomerName('');
-      // Avoid carrying stale table context into the next checkout.
       setSelectedTableId(null);
       if (variant === 'mobile') {
         setMobileTab('menu');
@@ -1520,13 +1519,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             </button>
             <div className="grid grid-cols-2 gap-3">
             <button 
-              onClick={() => handlePlaceOrder(false)}
+              onClick={() => handlePlaceOrder(false, true)}
               className="flex items-center justify-center gap-2 bg-[#262626] text-white py-4 rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-200"
             >
               <ShoppingCart size={20} /> Checkout
             </button>
             <button 
-              onClick={() => handlePlaceOrder(true)}
+              onClick={() => handlePlaceOrder(true, false)}
               className="flex items-center justify-center gap-2 bg-[#F57C00] text-white py-4 rounded-2xl font-black hover:bg-orange-600 transition-all active:scale-95 shadow-lg shadow-orange-200"
             >
               <CheckCircle size={20} /> Print & Bill
