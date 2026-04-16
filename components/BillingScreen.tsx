@@ -2,29 +2,32 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { 
-  Plus, 
-  Minus, 
-  Trash2, 
-  CreditCard, 
-  Banknote, 
-  Smartphone, 
-  UtensilsCrossed,
-  Truck,
-  Package,
+  ChefHat,
+  Printer,
+  TrendingUp,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  X,
+  Plus,
+  Minus,
+  Trash2,
+  User,
   ShoppingBag,
   ShoppingCart,
   CheckCircle,
-  User,
+  Smartphone,
+  CreditCard,
+  Banknote,
+  Truck,
+  Package,
+  UtensilsCrossed,
   Users,
   ArrowLeft,
-  ChevronUp,
-  X,
-  Search,
-  ChefHat,
-  Printer
+  Wallet
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor } from '../types';
+import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, TableCart } from '../types';
 import TablesGrid from './TablesGrid';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
@@ -247,6 +250,7 @@ interface BillingScreenProps {
   tables: Table[];
   floors?: Floor[];
   tableCarts: Record<string, TableCart>;
+  billCounter: number;
   onCreateOrder: (order: Order) => Promise<void>;
   onUpdateTableStatus: (tableId: string, status: Table['status'], currentOrderId?: string) => void;
   onUpdateTableCarts: (tableCarts: Record<string, TableCart>) => void;
@@ -264,6 +268,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   tables,
   floors = [],
   tableCarts,
+  billCounter,
   onCreateOrder,
   onUpdateTableStatus,
   onUpdateTableCarts,
@@ -282,6 +287,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [isCategoryCollapsed, setIsCategoryCollapsed] = useState(false);
   const mobileTablesContainerRef = useRef<HTMLDivElement | null>(null);
   const mobileCategoriesScrollRef = useRef<HTMLDivElement | null>(null);
+  const [discountValue, setDiscountValue] = useState<number>(0);
+  const [discountType, setDiscountType] = useState<'FIXED' | 'PERCENT'>('PERCENT');
+  const [showBillDetails, setShowBillDetails] = useState(false);
   const mobileItemsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileBillScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -515,33 +523,63 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const foodSubtotal = currentCart.reduce((acc, item) => {
-    const isDrink = isDrinkCategory(item.categoryId);
+    const category = categories.find(c => c.id === item.categoryId);
+    const isDrink = category?.type === 'DRINK';
     return !isDrink ? acc + (item.price * item.quantity) : acc;
   }, 0);
 
   const drinkSubtotal = currentCart.reduce((acc, item) => {
-    const isDrink = isDrinkCategory(item.categoryId);
+    const category = categories.find(c => c.id === item.categoryId);
+    const isDrink = category?.type === 'DRINK';
     return isDrink ? acc + (item.price * item.quantity) : acc;
   }, 0);
 
   const subtotal = foodSubtotal + drinkSubtotal;
-  const gst = foodSubtotal * taxRate;
-  const vat = drinkSubtotal * drinkTaxRate;
+  
+  // New tax calculation based on taxType
+  const taxInfo = currentCart.reduce((acc, item) => {
+    const category = categories.find(c => c.id === item.categoryId);
+    const taxType = category?.taxType || (category?.type === 'DRINK' ? 'VAT' : 'GST');
+    const itemSubtotal = item.price * item.quantity;
+    
+    if (taxType === 'VAT') {
+      acc.vat += itemSubtotal * drinkTaxRate;
+    } else if (taxType === 'GST') {
+      acc.gst += itemSubtotal * taxRate;
+    }
+    // MRP has no added tax
+    return acc;
+  }, { gst: 0, vat: 0 });
+
+  const discountAmount = discountType === 'PERCENT'
+    ? foodSubtotal * (discountValue / 100)
+    : Math.min(foodSubtotal, discountValue);
+  
+  const discountedFoodSubtotal = foodSubtotal - discountAmount;
+  const discountedSubtotal = discountedFoodSubtotal + drinkSubtotal;
+  
+  // GST recalculated on discounted food; VAT (on drinks) stays unchanged
+  const gst = taxInfo.gst * (discountedFoodSubtotal / (foodSubtotal || 1));
+  const vat = taxInfo.vat;
   const tax = gst + vat;
-  const total = subtotal + tax;
+  const total = discountedSubtotal + tax;
 
   const printReceipt = async (order: Order) => {
-    // Compute GST/VAT for this order using current category data
-    const orderFoodSub = order.items.reduce((acc, it) => {
-      return !isDrinkCategory(it.categoryId) ? acc + it.price * it.quantity : acc;
-    }, 0);
-    const orderDrinkSub = order.items.reduce((acc, it) => {
-      return isDrinkCategory(it.categoryId) ? acc + it.price * it.quantity : acc;
-    }, 0);
-    const orderGst = orderFoodSub * taxRate;
-    const orderVat = orderDrinkSub * drinkTaxRate;
+    // Compute GST/VAT for this order using category tax types
+    const orderTaxInfo = order.items.reduce((acc, it) => {
+      const category = categories.find(c => c.id === it.categoryId);
+      const taxType = category?.taxType || (category?.type === 'DRINK' ? 'VAT' : 'GST');
+      const itemSubtotal = it.price * it.quantity;
+      
+      if (taxType === 'VAT') {
+        acc.vat += itemSubtotal * drinkTaxRate;
+      } else if (taxType === 'GST') {
+        acc.gst += itemSubtotal * taxRate;
+      }
+      return acc;
+    }, { gst: 0, vat: 0 });
 
-    doIframeReceiptPrint(order, orderGst, orderVat);
+    doIframeReceiptPrint(order, orderTaxInfo.gst, orderTaxInfo.vat);
   };
 
   const doIframeReceiptPrint = (order: Order, orderGst: number, orderVat: number) => {
@@ -565,7 +603,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const html = `
       <html>
         <head>
-          <title>Receipt - ${order.billNo}</title>
+          <title>Invoice - ${order.billNo}</title>
           <style>
             @page { size: 80mm auto; margin: 0; }
             * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -598,34 +636,95 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           <div class="center header-name">${restaurantInfo.name}</div>
           <div class="center">${restaurantInfo.address}</div>
           <div class="center">Tel: ${restaurantInfo.phone}</div>
-          ${restaurantInfo.gstNo ? '<div class="center" style="font-size:10px;">GSTIN: ' + restaurantInfo.gstNo + '</div>' : ''}
           <div class="line"></div>
-          <div>Bill: ${order.billNo}</div>
+          <div class="center bold" style="font-size: 16px; margin: 5px 0;">TAX INVOICE</div>
+          <div class="line"></div>
+          <div>Invoice No: ${order.billNo}</div>
           ${order.customerName ? '<div>Cust: ' + order.customerName + '</div>' : ''}
           <div>Date: ${order.date}</div>
           <div>Time: ${order.time}</div>
           <div>Type: ${order.orderType.replace('_', ' ')}</div>
           <div class="line"></div>
-          <div class="row bold">
-            <span class="item-name">Item</span>
-            <span class="qty">Qty</span>
-            <span class="amt">Amt</span>
-          </div>
-          ${order.items.map(it => `
-            <div class="row">
-              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}${(it as any).selectedMl ? ` (${(it as any).selectedMl})` : ''}</span>
-              <span class="qty">${it.quantity}</span>
-              <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-            </div>
-          `).join('')}
+          
+          <!-- Food Items Section -->
+          ${(() => {
+            const foodItems = order.items.filter(it => {
+              const cat = categories.find(c => c.id === it.categoryId);
+              return cat?.type !== 'DRINK';
+            });
+            if (foodItems.length === 0) return '';
+            const foodSub = foodItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+            return `
+              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- FOOD ITEMS ---</div>
+              <div class="row bold">
+                <span class="item-name">Item</span>
+                <span class="qty">Qty</span>
+                <span class="amt">Amt</span>
+              </div>
+              ${foodItems.map(it => `
+                <div class="row">
+                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                  <span class="qty">${it.quantity}</span>
+                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                </div>
+              `).join('')}
+              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+                <span>FOOD TOTAL:</span>
+                <span>Rs ${foodSub.toFixed(0)}</span>
+              </div>
+              <div style="height: 8px;"></div>
+            `;
+          })()}
+
+          <!-- Drink Items Section -->
+          ${(() => {
+            const drinkItems = order.items.filter(it => {
+              const cat = categories.find(c => c.id === it.categoryId);
+              return cat?.type === 'DRINK';
+            });
+            if (drinkItems.length === 0) return '';
+            const drinkSub = drinkItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+            return `
+              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- DRINK ITEMS ---</div>
+              <div class="row bold">
+                <span class="item-name">Item</span>
+                <span class="qty">Qty</span>
+                <span class="amt">Amt</span>
+              </div>
+              ${drinkItems.map(it => `
+                <div class="row">
+                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                  <span class="qty">${it.quantity}</span>
+                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                </div>
+              `).join('')}
+              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+                <span>DRINKS TOTAL:</span>
+                <span>Rs ${drinkSub.toFixed(0)}</span>
+              </div>
+              <div style="height: 8px;"></div>
+            `;
+          })()}
+
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
-          <div class="row"><span>GST:</span><span>Rs ${orderGst.toFixed(0)}</span></div>
-          <div class="row"><span>VAT:</span><span>Rs ${orderVat.toFixed(0)}</span></div>
+          ${order.discountAmount && order.discountAmount > 0 ? `
+            <div class="row" style="color: #000;">
+              <span>Discount (${order.discountPercent}%):</span>
+              <span>-Rs ${order.discountAmount.toFixed(0)}</span>
+            </div>
+          ` : ''}
+          ${orderGst > 0 ? `<div class="row"><span>GST:</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
+          ${orderVat > 0 ? `<div class="row"><span>VAT:</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
           <div class="row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
-          <div class="row bold total-section"><span>TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
+          <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center bold">Paid via ${order.paymentMode}</div>
+          <div style="margin-top: 10px; font-size: 12px; font-weight: 900;">
+            ${restaurantInfo.gstNo && restaurantInfo.gstNo !== 'NOT SET' ? '<div>GSTIN: ' + restaurantInfo.gstNo + '</div>' : ''}
+            ${restaurantInfo.vatNo && restaurantInfo.vatNo !== 'NOT SET' ? '<div>VAT NO: ' + restaurantInfo.vatNo + '</div>' : ''}
+            ${restaurantInfo.fssaiNo && restaurantInfo.fssaiNo !== 'NOT SET' ? '<div>FSSAI NO: ' + restaurantInfo.fssaiNo + '</div>' : ''}
+          </div>
           <div class="footer center">
             <p class="bold">Thank you!</p>
             <p class="bold">Visit again.</p>
@@ -773,7 +872,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
   const handlePlaceOrder = async (print = false, shouldCheckout = true) => {
     const selectedTableItems = selectedTableId
-      ? toCartItemsArray(tableCarts[selectedTableId]?.items)
+      ? tableCarts[selectedTableId]?.items || []
       : [];
     const checkoutItems = currentCart.length > 0 ? currentCart : selectedTableItems;
     const effectiveOrderType: OrderType =
@@ -800,8 +899,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }, 0);
 
     const checkoutSubtotal = checkoutFoodSubtotal + checkoutDrinkSubtotal;
-    const checkoutTax = (checkoutFoodSubtotal * taxRate) + (checkoutDrinkSubtotal * drinkTaxRate);
-    const checkoutTotal = checkoutSubtotal + checkoutTax;
+    const checkoutDiscountAmount = discountType === 'PERCENT'
+      ? checkoutFoodSubtotal * (discountValue / 100)
+      : Math.min(checkoutFoodSubtotal, discountValue);
+    const checkoutDiscountedFood = checkoutFoodSubtotal - checkoutDiscountAmount;
+    const checkoutFoodTax = checkoutDiscountedFood * taxRate;
+    const checkoutDrinkTax = checkoutDrinkSubtotal * drinkTaxRate;
+    const checkoutTax = checkoutFoodTax + checkoutDrinkTax;
+    const checkoutTotal = (checkoutDiscountedFood + checkoutDrinkSubtotal) + checkoutTax;
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const d = new Date();
@@ -809,7 +914,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
     const newOrder: Order = {
       id: Math.random().toString(36).substr(2, 9),
-      billNo: `DRAFT-${Date.now().toString().substr(-6)}`, // Temporary bill no for drafts
+      billNo: `INV-${billCounter + 1}`, // Sequential preview number
       customerName: (customerName || "").trim() || "Guest",
       tableId: effectiveOrderType === 'DINE_IN' && selectedTableId ? selectedTableId : "",
       tableName: effectiveOrderType === 'DINE_IN' && selectedTable ? selectedTable.name : "",
@@ -817,6 +922,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       items: [...checkoutItems],
       subtotal: checkoutSubtotal,
+      discountPercent: discountType === 'PERCENT' ? discountValue : 0,
+      discountAmount: checkoutDiscountAmount,
       tax: checkoutTax,
       total: checkoutTotal,
       paymentMode,
@@ -1400,7 +1507,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         )}
       </div>
 
-      <div className="w-80 md:w-96 bg-white border-l shadow-2xl flex flex-col shrink-0 z-10">
+      <div className="w-80 md:w-96 bg-white border-l shadow-2xl flex flex-col shrink-0 z-10 h-full overflow-hidden">
         {/* Table indicator for Dine In */}
         {orderType === 'DINE_IN' && selectedTableId && (
           <div className="px-4 py-2 bg-[#F57C00] text-white text-center">
@@ -1480,59 +1587,123 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           )}
         </div>
 
-        <div className="p-5 border-t bg-gray-50 space-y-5 rounded-t-3xl shadow-top">
-          <div className="space-y-1.5 text-xs font-bold uppercase tracking-wider">
-            <div className="flex justify-between text-gray-400">
-              <span>Subtotal</span>
-              <span>₹{subtotal.toFixed(0)}</span>
-            </div>
-            <div className="flex justify-between text-gray-400">
-              <span>GST</span>
-              <span>₹{gst.toFixed(0)}</span>
-            </div>
-            <div className="flex justify-between text-gray-400">
-              <span>VAT</span>
-              <span>₹{vat.toFixed(0)}</span>
-            </div>
-            <div className="flex justify-between text-gray-400">
-              <span>Tax Total</span>
-              <span>₹{tax.toFixed(0)}</span>
-            </div>
-            <div className="flex justify-between text-2xl font-black text-gray-900 border-t-2 border-dashed border-gray-200 pt-3 mt-3">
+        <div className="p-5 border-t bg-gray-50 space-y-4 rounded-t-3xl shadow-top shrink-0 relative">
+          {/* Toggle Button / Arrow */}
+          <button 
+            onClick={() => setShowBillDetails(!showBillDetails)}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 w-10 h-10 bg-white border-2 border-orange-100 shadow-lg rounded-full flex items-center justify-center text-[#F57C00] hover:bg-orange-50 hover:scale-110 active:scale-95 transition-all z-20"
+          >
+            {showBillDetails ? <ChevronDown size={24} /> : <ChevronUp size={24} />}
+          </button>
+
+          {showBillDetails && (
+            <>
+              {/* Discount Section */}
+              <div className="space-y-3 p-3 bg-white rounded-xl border border-dashed border-orange-200 animate-in slide-in-from-bottom-2 duration-300">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#F57C00]">
+                    <TrendingUp size={16} />
+                    <span className="text-[10px] font-black uppercase tracking-wider">Discount Tab</span>
+                  </div>
+                  <div className="flex bg-gray-100 p-1 rounded-lg">
+                    <button 
+                      onClick={() => setDiscountType('FIXED')}
+                      className={`px-3 py-1 rounded-md text-[10px] font-black transition-all ${discountType === 'FIXED' ? 'bg-white text-[#F57C00] shadow-sm' : 'text-gray-400 font-bold'}`}
+                    >
+                      FIXED (₹)
+                    </button>
+                    <button 
+                      onClick={() => setDiscountType('PERCENT')}
+                      className={`px-3 py-1 rounded-md text-[10px] font-black transition-all ${discountType === 'PERCENT' ? 'bg-white text-[#F57C00] shadow-sm' : 'text-gray-400 font-bold'}`}
+                    >
+                      PERCENT (%)
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-gray-400">Value:</span>
+                  <input 
+                    type="number" 
+                    value={discountValue || ''} 
+                    onChange={(e) => setDiscountValue(Math.max(0, discountType === 'PERCENT' ? Math.min(100, Number(e.target.value) || 0) : (Number(e.target.value) || 0)))}
+                    placeholder="0"
+                    className="flex-1 px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-lg text-sm font-black text-[#F57C00] outline-none focus:ring-2 focus:ring-[#F57C00]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-xs font-bold uppercase tracking-wider border-b pb-3 border-gray-100 animate-in fade-in duration-500">
+                <div className="flex justify-between text-gray-400 font-medium">
+                  <span>Subtotal</span>
+                  <span>₹{subtotal.toFixed(0)}</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount ({discountType === 'PERCENT' ? `${discountValue}%` : `Fixed`})</span>
+                    <span>-₹{discountAmount.toFixed(0)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-gray-400 font-medium">
+                  <span>GST (Food)</span>
+                  <span>₹{gst.toFixed(0)}</span>
+                </div>
+                <div className="flex justify-between text-gray-400 font-medium">
+                  <span>VAT (Drinks)</span>
+                  <span>₹{vat.toFixed(0)}</span>
+                </div>
+                <div className="flex justify-between text-gray-400 font-medium">
+                  <span>Tax Total</span>
+                  <span>₹{tax.toFixed(0)}</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="flex justify-between text-2xl font-black text-gray-900 pt-1">
+            <span className="flex flex-col">
+              <span className="text-[10px] text-gray-400 uppercase tracking-widest font-black leading-none mb-1">Total Payable</span>
               <span>Total</span>
-              <span className="text-[#F57C00]">₹{total.toFixed(0)}</span>
-            </div>
+            </span>
+            <span className="text-[#F57C00] flex flex-col items-end">
+              <span className="text-sm text-gray-400 font-medium leading-none mb-1">
+                {currentCart.length} {currentCart.length === 1 ? 'Item' : 'Items'}
+              </span>
+              ₹{total.toFixed(0)}
+            </span>
           </div>
 
           <div className="flex gap-2">
-            <PaymentTab active={paymentMode === 'CASH'} onClick={() => setPaymentMode('CASH')} icon={<Banknote size={18} />} label="Cash" />
-            <PaymentTab active={paymentMode === 'CARD'} onClick={() => setPaymentMode('CARD')} icon={<CreditCard size={18} />} label="Card" />
-            <PaymentTab active={paymentMode === 'UPI'} onClick={() => setPaymentMode('UPI')} icon={<Smartphone size={18} />} label="UPI" />
+            <PaymentTab active={paymentMode === 'CASH'} onClick={() => setPaymentMode('CASH')} icon={<Banknote size={16} />} label="Cash" />
+            <PaymentTab active={paymentMode === 'CARD'} onClick={() => setPaymentMode('CARD')} icon={<CreditCard size={16} />} label="Card" />
+            <PaymentTab active={paymentMode === 'UPI'} onClick={() => setPaymentMode('UPI')} icon={<Smartphone size={16} />} label="UPI" />
+            <PaymentTab active={paymentMode === 'OTHER'} onClick={() => setPaymentMode('OTHER')} icon={<Wallet size={16} />} label="Others" />
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <button 
               onClick={() => printKOT()}
-              className="flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-100"
+              className="flex flex-col items-center justify-center gap-1 bg-indigo-600 text-white py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-100"
             >
-              <ChefHat size={20} /> Print KOT (Kitchen)
+              <ChefHat size={18} /> 
+              <span className="text-[10px] uppercase tracking-tighter">KOT</span>
             </button>
-            <div className="grid grid-cols-2 gap-3">
             <button 
               onClick={() => handlePlaceOrder(false, true)}
-              className="flex items-center justify-center gap-2 bg-[#262626] text-white py-4 rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-200"
+              className="flex flex-col items-center justify-center gap-1 bg-[#262626] text-white py-3 rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-200"
             >
-              <ShoppingCart size={20} /> Checkout
+              <ShoppingCart size={18} />
+              <span className="text-[10px] uppercase tracking-tighter">Checkout</span>
             </button>
             <button 
               onClick={() => handlePlaceOrder(true, false)}
-              className="flex items-center justify-center gap-2 bg-[#F57C00] text-white py-4 rounded-2xl font-black hover:bg-orange-600 transition-all active:scale-95 shadow-lg shadow-orange-200"
+              className="flex flex-col items-center justify-center gap-1 bg-[#F57C00] text-white py-3 rounded-2xl font-black hover:bg-orange-600 transition-all active:scale-95 shadow-lg shadow-orange-200"
             >
-              <CheckCircle size={20} /> Print & Bill
+              <CheckCircle size={18} />
+              <span className="text-[10px] uppercase tracking-tighter">Print Bill</span>
             </button>
           </div>
         </div>
-      </div>
       </div>
       </div>
     </div>
@@ -1544,7 +1715,7 @@ const OrderTypeTab: React.FC<{ active: boolean; onClick: () => void; label: stri
 );
 
 const PaymentTab: React.FC<{ active: boolean; onClick: () => void; label: string; icon: React.ReactNode }> = ({ active, onClick, label, icon }) => (
-  <button onClick={onClick} className={`flex-1 flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl border-2 transition-all ${active ? 'border-[#F57C00] bg-orange-50 text-[#F57C00] shadow-sm' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>{icon}<span className="text-[10px] font-black uppercase tracking-widest">{label}</span></button>
+  <button onClick={onClick} className={`flex-1 flex flex-col items-center gap-1 py-2 px-1 rounded-2xl border-2 transition-all ${active ? 'border-[#F57C00] bg-orange-50 text-[#F57C00] shadow-sm' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>{icon}<span className="text-[10px] font-black uppercase tracking-widest">{label}</span></button>
 );
 
 export default BillingScreen;

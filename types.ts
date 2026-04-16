@@ -1,6 +1,6 @@
 export type OrderType = 'DINE_IN' | 'DELIVERY' | 'PICK_UP';
 export type OrderStatus = 'PLACED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
-export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'DUE' | 'PART';
+export type PaymentMode = 'CASH' | 'CARD' | 'UPI' | 'DUE' | 'PART' | 'OTHER';
 export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
 
 export interface Floor {
@@ -23,6 +23,8 @@ export interface RestaurantInfo {
   phone: string;
   address: string;
   gstNo?: string;
+  vatNo?: string;
+  fssaiNo?: string;
   kotPrinterIp?: string;
   useUsbForBill?: boolean;
 }
@@ -50,6 +52,7 @@ export interface Category {
   id: string;
   name: string;
   type?: 'FOOD' | 'DRINK';
+  taxType?: 'VAT' | 'GST' | 'MRP';
 }
 
 export interface CartItem extends MenuItem {
@@ -57,6 +60,11 @@ export interface CartItem extends MenuItem {
   selectedVegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD';
   selectedPortion?: 'HALF' | 'FULL';
   selectedMl?: string;
+}
+
+export interface TableCart {
+  items: CartItem[];
+  customerName: string;
 }
 
 export interface Order {
@@ -69,6 +77,8 @@ export interface Order {
   time: string;
   items: CartItem[];
   subtotal: number;
+  discountPercent?: number;
+  discountAmount?: number;
   tax: number;
   total: number;
   paymentMode: PaymentMode;

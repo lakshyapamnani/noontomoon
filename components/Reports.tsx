@@ -17,7 +17,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  X
+  X,
+  Wallet
 } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Order } from '../types';
@@ -72,6 +73,8 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
     const cashRevenue = cashOrders.reduce((sum, o) => sum + o.total, 0);
     const cardRevenue = cardOrders.reduce((sum, o) => sum + o.total, 0);
     const upiRevenue = upiOrders.reduce((sum, o) => sum + o.total, 0);
+    const othersOrders = filteredOrders.filter(o => o.paymentMode === 'OTHER');
+    const othersRevenue = othersOrders.reduce((sum, o) => sum + o.total, 0);
     
     // Order type breakdown
     const dineInOrders = filteredOrders.filter(o => o.orderType === 'DINE_IN');
@@ -130,6 +133,8 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
       completedOrders: completedOrders.length,
       cancelledOrders: cancelledOrders.length,
       pendingOrders: pendingOrders.length,
+      othersOrders: othersOrders.length,
+      othersRevenue,
       topItems,
       dailyData
     };
@@ -303,7 +308,8 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
   const paymentData = [
     { name: 'Cash', value: analytics.cashRevenue, orders: analytics.cashOrders },
     { name: 'Card', value: analytics.cardRevenue, orders: analytics.cardOrders },
-    { name: 'UPI', value: analytics.upiRevenue, orders: analytics.upiOrders }
+    { name: 'UPI', value: analytics.upiRevenue, orders: analytics.upiOrders },
+    { name: 'Others', value: analytics.othersRevenue, orders: analytics.othersOrders }
   ].filter(item => item.value > 0);
 
   // Order type chart data
@@ -376,6 +382,7 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
                 <option>CASH</option>
                 <option>CARD</option>
                 <option>UPI</option>
+                <option>OTHER</option>
               </select>
             </div>
             <div className="space-y-1">
@@ -568,6 +575,12 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
                 label="UPI Payments"
                 orders={analytics.upiOrders}
                 revenue={analytics.upiRevenue}
+              />
+              <PaymentBreakdownItem 
+                icon={<Wallet size={20} className="text-amber-600" />}
+                label="Other Payments"
+                orders={analytics.othersOrders}
+                revenue={analytics.othersRevenue}
               />
             </div>
           </div>
