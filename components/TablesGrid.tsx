@@ -68,7 +68,6 @@ const TablesGrid: React.FC<TablesGridProps> = ({
 
     return (
       <button
-        key={table.id}
         type="button"
         onClick={() => onSelectTable(table.id)}
         className={[
@@ -172,7 +171,11 @@ const TablesGrid: React.FC<TablesGridProps> = ({
                 </div>
               </React.Fragment>
             )}
-            {section.tables.map((table) => renderCard(table))}
+            {section.tables.map((table) => (
+              <React.Fragment key={table.id}>
+                {renderCard(table)}
+              </React.Fragment>
+            ))}
           </React.Fragment>
         ))}
 

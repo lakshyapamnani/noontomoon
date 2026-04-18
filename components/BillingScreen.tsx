@@ -829,7 +829,131 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       return;
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    doIframeKOTPrint(selectedTable);
+    const endpoint = resolveKotPrinterEndpoint();
+    if (!endpoint) {
+      alert('Please set the KOT printer IP in Configuration.');
+      return;
+    }
+    const sent = await sendKotToEscPos(selectedTable);
+    if (!sent) {
+      if (variant === 'mobile') return;
+      doIframeKOTPrint(selectedTable);
+    }
+  };
+
+  const buildKotEscPosText = (selectedTable: Table | undefined) => {
+    const esc = '\x1b';
+    const gs = '\x1d';
+    const lineWidth = 42;
+    const qtyWidth = 4;
+    const itemWidth = lineWidth - qtyWidth - 1;
+
+    const padRight = (value: string, width: number) => {
+      if (value.length >= width) return value;
+      return value + ' '.repeat(width - value.length);
+    };
+
+    const padLeft = (value: string, width: number) => {
+      if (value.length >= width) return value;
+      return ' '.repeat(width - value.length) + value;
+    };
+
+    const wrapText = (value: string, width: number) => {
+      const words = value.split(/\s+/).filter(Boolean);
+      const lines: string[] = [];
+      let current = '';
+      words.forEach(word => {
+        if (!current.length) {
+          current = word;
+          return;
+        }
+        if ((current + ' ' + word).length <= width) {
+          current = current + ' ' + word;
+          return;
+        }
+        lines.push(current);
+        current = word;
+      });
+      if (current.length) lines.push(current);
+      return lines.length ? lines : [''];
+    };
+
+    const itemLines: string[] = [];
+    currentCart.forEach(it => {
+      const baseName = it.name.toUpperCase();
+      const lines = wrapText(baseName, itemWidth);
+      lines.forEach((line, idx) => {
+        const qtyText = idx === 0 ? padLeft(String(it.quantity), qtyWidth) : ' '.repeat(qtyWidth);
+        itemLines.push(`${padRight(line, itemWidth)} ${qtyText}`);
+      });
+      if (it.selectedPortion) {
+        itemLines.push(`  (${it.selectedPortion === 'HALF' ? 'HALF' : 'FULL'})`);
+      }
+      if (it.selectedVegChoice) {
+        itemLines.push(`  (${it.selectedVegChoice})`);
+      }
+      if (it.selectedMl) {
+        itemLines.push(`  (${it.selectedMl})`);
+      }
+    });
+
+    const now = new Date();
+    const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const printedAt = now.toLocaleString();
+
+    const init = esc + '@';
+    const boldOn = esc + 'E' + '\x01';
+    const boldOff = esc + 'E' + '\x00';
+    const alignCenter = esc + 'a' + '\x01';
+    const alignLeft = esc + 'a' + '\x00';
+    const doubleOn = gs + '!' + '\x11';
+    const doubleOff = gs + '!' + '\x00';
+    const cut = gs + 'V' + '\x00';
+
+    const lines: string[] = [];
+    lines.push(init);
+    lines.push(alignCenter + doubleOn + boldOn + 'K. O. T.' + boldOff + doubleOff);
+    lines.push('------------------------------------------');
+    lines.push(alignCenter + doubleOn + boldOn + `TABLE: ${selectedTable?.name || 'TAKEAWAY'}` + boldOff + doubleOff);
+    if (customerName) {
+      lines.push(alignCenter + boldOn + `Cust: ${customerName}` + boldOff);
+    }
+    lines.push(alignCenter + `Time: ${timeLabel}`);
+    lines.push('------------------------------------------');
+    lines.push(alignLeft + boldOn + padRight('ITEM', itemWidth) + ' ' + padLeft('QTY', qtyWidth) + boldOff);
+    itemLines.forEach(line => lines.push(alignLeft + line));
+    lines.push('------------------------------------------');
+    lines.push(alignCenter + `Printed at ${printedAt}`);
+    lines.push('\n\n' + cut);
+
+    return lines.join('\n');
+  };
+
+  const resolveKotPrinterEndpoint = () => {
+    const raw = (restaurantInfo.kotPrinterIp || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `http://${raw}:9100/print`;
+  };
+
+  const sendKotToEscPos = async (selectedTable: Table | undefined) => {
+    const endpoint = resolveKotPrinterEndpoint();
+    if (!endpoint) return false;
+
+    try {
+      const payload = buildKotEscPosText(selectedTable);
+      const encoder = new TextEncoder();
+      await fetch(endpoint, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: encoder.encode(payload)
+      });
+      return true;
+    } catch (error) {
+      console.error('ESC/POS KOT print failed:', error);
+      return false;
+    }
   };
 
   const doIframeKOTPrint = (selectedTable: Table | undefined) => {
@@ -1378,7 +1502,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
       {/* Item Options Popup (Veg/Non-Veg + Addons) */}
       {optionsItem && (
         <ItemOptionsPopup
@@ -1575,8 +1700,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         </div>
         )}
       </div>
+      </div>
+      </div>
 
-      <div className="w-80 md:w-96 bg-white border-l shadow-2xl flex flex-col shrink-0 z-10 h-full overflow-hidden">
+      <div className="w-[30%] bg-white border-l shadow-2xl flex flex-col shrink-0 z-10 h-full overflow-hidden">
         {/* Table indicator for Dine In */}
         {orderType === 'DINE_IN' && selectedTableId && (
           <div className="px-4 py-2 bg-[#F57C00] text-white text-center">
@@ -1773,7 +1900,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             </button>
           </div>
         </div>
-      </div>
       </div>
       {/* Open Item Modal */}
       {openItemModal.isOpen && (

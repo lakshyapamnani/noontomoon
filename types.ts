@@ -25,6 +25,7 @@ export interface RestaurantInfo {
   gstNo?: string;
   vatNo?: string;
   fssaiNo?: string;
+  billPrinterIp?: string;
   kotPrinterIp?: string;
   useUsbForBill?: boolean;
 }
@@ -92,4 +93,4 @@ export interface SalesReportEntry {
   totalOrders: number;
   totalSales: number;
   paymentModes: Record<PaymentMode, number>;
-}
+}

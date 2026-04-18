@@ -553,6 +553,17 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
 
                     <hr className="my-6 border-gray-200" />
                    <h4 className="text-lg font-black text-gray-900 mb-4">Printer Setup</h4>
+                    <div>
+                      <label className="block text-sm font-black text-gray-900 mb-2 uppercase">Main Bill Printer IP</label>
+                      <input 
+                       type="text" 
+                       value={localRestaurantInfo.billPrinterIp || ''} 
+                       onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, billPrinterIp: e.target.value})}
+                       placeholder="e.g., 192.168.0.120"
+                       className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-blue-500 outline-none shadow-inner placeholder:text-gray-400" 
+                      />
+                      <p className="text-xs text-gray-500 mt-2 font-bold">The network IP address of your main bill printer.</p>
+                    </div>
                    <div>
                      <label className="block text-sm font-black text-gray-900 mb-2 uppercase">KOT Printer IP</label>
                      <input 

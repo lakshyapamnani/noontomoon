@@ -1022,8 +1022,24 @@ const App: React.FC = () => {
     const discountAmount = subtotal * (discountPercent / 100);
     const discountedSubtotal = subtotal - discountAmount;
     
-    // Proportional tax recalculation
-    const taxAmount = (subtotal * taxRate) * (discountedSubtotal / (subtotal || 1));
+    // Calculate accurate GST and VAT
+    const taxInfo = items.reduce((acc, it) => {
+      const cat = categories.find(c => String(c.id) === String(it.categoryId));
+      const taxType = cat?.taxType || (cat?.type === 'DRINK' ? 'VAT' : 'GST');
+      const itemSubtotal = (it.price || 0) * (it.quantity || 0);
+      
+      if (taxType === 'VAT') {
+        acc.vat += itemSubtotal * drinkTaxRate;
+      } else {
+        acc.gst += itemSubtotal * taxRate;
+      }
+      return acc;
+    }, { gst: 0, vat: 0 });
+
+    const discountFactor = discountedSubtotal / (subtotal || 1);
+    const gstAmount = taxInfo.gst * discountFactor;
+    const vatAmount = taxInfo.vat * discountFactor;
+    const taxAmount = gstAmount + vatAmount;
     const total = discountedSubtotal + taxAmount;
 
     // iframe print
