@@ -420,6 +420,7 @@ export const INITIAL_RESTAURANT_INFO = {
   gstNo: 'NOT SET',
   vatNo: 'NOT SET',
   fssaiNo: 'NOT SET',
+  printServerUrl: 'http://localhost:3001',
   billPrinterIp: '',
   kotPrinterIp: '192.168.1.5',
 };

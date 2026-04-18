@@ -25,6 +25,7 @@ export interface RestaurantInfo {
   gstNo?: string;
   vatNo?: string;
   fssaiNo?: string;
+  printServerUrl?: string;
   billPrinterIp?: string;
   kotPrinterIp?: string;
   useUsbForBill?: boolean;

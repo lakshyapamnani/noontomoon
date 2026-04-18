@@ -829,7 +829,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       return;
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    const sent = await sendKotToPrintServer(selectedTable);
+    const sent = await sendKotDirectEscPos(selectedTable);
     if (!sent) {
       doIframeKOTPrint(selectedTable);
     }
@@ -912,13 +912,47 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
   const sendKotToPrintServer = async (selectedTable: Table | undefined) => {
     try {
-      const payload = buildKotPrintLines(selectedTable);
-      const response = await fetch('http://localhost:3001/print-kot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines: payload })
+      const payloadLines = buildKotPrintLines(selectedTable);
+      
+      const init = new Uint8Array([0x1b, 0x40]);
+      const alignCenter = new Uint8Array([0x1b, 0x61, 0x01]);
+      const alignLeft = new Uint8Array([0x1b, 0x61, 0x00]);
+      const doubleOn = new Uint8Array([0x1d, 0x21, 0x11]);
+      const doubleOff = new Uint8Array([0x1d, 0x21, 0x00]);
+      const cut = new Uint8Array([0x1d, 0x56, 0x42, 0x00]);
+      
+      const encoder = new TextEncoder();
+      const buffers: Uint8Array[] = [init, alignCenter, doubleOn];
+      
+      // Top header
+      buffers.push(encoder.encode(payloadLines[0] + '\n'));
+      buffers.push(doubleOff, alignLeft);
+      
+      // Remaining lines
+      payloadLines.slice(1).forEach(line => {
+        buffers.push(encoder.encode(line + '\n'));
       });
-      return response.ok;
+      
+      buffers.push(encoder.encode('\n\n\n\n'));
+      buffers.push(cut);
+      
+      const totalLength = buffers.reduce((acc, val) => acc + val.length, 0);
+      const result = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const array of buffers) {
+        result.set(array, offset);
+        offset += array.length;
+      }
+
+      const printerIp = restaurantInfo.kotPrinterIp || '192.168.0.114';
+      const response = await fetch(`http://${printerIp}:9100/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: result
+      });
+      
+      // Some thermal printers don't return standard HTTP responses for port 9100
+      return true;
     } catch (error) {
       console.error('Print server KOT failed:', error);
       return false;
