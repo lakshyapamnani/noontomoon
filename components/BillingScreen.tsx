@@ -831,7 +831,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const sent = await sendKotToPrintServer(selectedTable);
     if (!sent) {
-      alert('Unable to reach the print server. Is it running on http://localhost:3001 ?');
+      doIframeKOTPrint(selectedTable);
     }
   };
 
