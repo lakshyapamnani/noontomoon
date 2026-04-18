@@ -669,9 +669,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const html = `
       <html>
         <head>
-          <title>Invoice - ${order.billNo}</title>
+          <title>Invoice</title>
           <style>
-            @page { size: 80mm auto; margin: 0; }
+            @page { margin: 0; size: 80mm auto; }
+            @media print {
+              @page { margin: 0; }
+              body { margin: 0; }
+            }
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body {
               font-family: 'Arial Black', Arial, sans-serif;
@@ -831,7 +835,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const sent = await sendKotDirectEscPos(selectedTable);
     if (!sent) {
-      doIframeKOTPrint(selectedTable);
+      alert('KOT print failed. Please check printer connection.');
     }
   };
 
@@ -910,7 +914,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     return lines;
   };
 
-  const sendKotToPrintServer = async (selectedTable: Table | undefined) => {
+  const sendKotDirectEscPos = async (selectedTable: Table | undefined) => {
     try {
       const payloadLines = buildKotPrintLines(selectedTable);
       
@@ -923,17 +927,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       
       const encoder = new TextEncoder();
       const buffers: Uint8Array[] = [init, alignCenter, doubleOn];
-      
-      // Top header
-      buffers.push(encoder.encode(payloadLines[0] + '\n'));
+
+      const newline = '\r\n';
+      buffers.push(encoder.encode(payloadLines[0] + newline));
       buffers.push(doubleOff, alignLeft);
-      
-      // Remaining lines
-      payloadLines.slice(1).forEach(line => {
-        buffers.push(encoder.encode(line + '\n'));
-      });
-      
-      buffers.push(encoder.encode('\n\n\n\n'));
+
+      const remainingText = payloadLines.slice(1).join(newline) + newline;
+      if (remainingText.trim().length > 0) {
+        buffers.push(encoder.encode(remainingText));
+      }
+
+      buffers.push(encoder.encode(newline.repeat(4)));
       buffers.push(cut);
       
       const totalLength = buffers.reduce((acc, val) => acc + val.length, 0);
@@ -945,7 +949,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       }
 
       const printerIp = restaurantInfo.kotPrinterIp || '192.168.0.114';
-      const response = await fetch(`http://${printerIp}:9100/`, {
+      await fetch(`http://${printerIp}:9100/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: result
@@ -954,112 +958,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       // Some thermal printers don't return standard HTTP responses for port 9100
       return true;
     } catch (error) {
-      console.error('Print server KOT failed:', error);
+      console.error('Direct ESC/POS KOT failed:', error);
       return false;
     }
-  };
-
-  const doIframeKOTPrint = (selectedTable: Table | undefined) => {
-    // iframe print
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      alert('Unable to create print frame.');
-      document.body.removeChild(iframe);
-      return;
-    }
-
-    const html = `
-      <html>
-        <head>
-          <title>KOT - ${selectedTable?.name || 'Takeaway'}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0; }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { 
-              font-family: Arial, sans-serif; 
-              width: 76mm; 
-              max-width: 76mm;
-              margin: 0 auto; 
-              padding: 3mm; 
-              font-size: 14px; 
-              color: #000; 
-              line-height: 1.3;
-              font-weight: bold;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .line { border-bottom: 2px dashed #000; margin: 8px 0; }
-            .header { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
-            .table-info { font-size: 20px; font-weight: bold; margin: 10px 0; }
-            .item-row { display: flex; justify-content: space-between; margin: 6px 0; border-bottom: 1px dashed #000; padding-bottom: 4px; }
-            .item-name { flex: 1; word-break: break-word; }
-            .qty { width: 40px; text-align: right; font-weight: bold; font-size: 20px; }
-            .footer { margin-top: 15px; font-size: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="center header">K. O. T.</div>
-          <div class="line"></div>
-          <div class="table-info center uppercase">TABLE: ${selectedTable?.name || 'TAKEAWAY'}</div>
-          ${customerName ? '<div class="center bold">Cust: ' + customerName + '</div>' : ''}
-          <div class="center">Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-          <div class="line"></div>
-          <div class="bold item-row">
-            <span class="item-name">ITEM</span>
-            <span class="qty">QTY</span>
-          </div>
-          ${currentCart.map(it => `
-            <div class="item-row">
-              <span class="item-name">
-                <span class="bold">${it.name.toUpperCase()}</span>
-                ${it.selectedPortion ? `<br/>&nbsp;&nbsp;(${it.selectedPortion === 'HALF' ? 'HALF' : 'FULL'})` : ''}
-                ${it.selectedVegChoice ? `<br/>&nbsp;&nbsp;(${it.selectedVegChoice})` : ''}
-                ${(it as any).selectedMl ? `<br/>&nbsp;&nbsp;(${(it as any).selectedMl})` : ''}
-              </span>
-              <span class="qty">${it.quantity}</span>
-            </div>
-          `).join('')}
-          <div class="line"></div>
-          <div class="center footer">
-             Printed at ${new Date().toLocaleString()}
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `;
-
-    iframeDoc.write(html);
-    iframeDoc.close();
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-        window.removeEventListener('message', handleMessage);
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    setTimeout(() => {
-      if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      window.removeEventListener('message', handleMessage);
-    }, 300000); // 5 minutes fallback
   };
 
 
