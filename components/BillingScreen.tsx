@@ -829,21 +829,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       return;
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    const endpoint = resolveKotPrinterEndpoint();
-    if (!endpoint) {
-      alert('Please set the KOT printer IP in Configuration.');
-      return;
-    }
-    const sent = await sendKotToEscPos(selectedTable);
+    const sent = await sendKotToPrintServer(selectedTable);
     if (!sent) {
-      if (variant === 'mobile') return;
-      doIframeKOTPrint(selectedTable);
+      alert('Unable to reach the print server. Is it running on http://localhost:3001 ?');
     }
   };
 
-  const buildKotEscPosText = (selectedTable: Table | undefined) => {
-    const esc = '\x1b';
-    const gs = '\x1d';
+  const buildKotPrintLines = (selectedTable: Table | undefined) => {
     const lineWidth = 42;
     const qtyWidth = 4;
     const itemWidth = lineWidth - qtyWidth - 1;
@@ -901,57 +893,34 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const printedAt = now.toLocaleString();
 
-    const init = esc + '@';
-    const boldOn = esc + 'E' + '\x01';
-    const boldOff = esc + 'E' + '\x00';
-    const alignCenter = esc + 'a' + '\x01';
-    const alignLeft = esc + 'a' + '\x00';
-    const doubleOn = gs + '!' + '\x11';
-    const doubleOff = gs + '!' + '\x00';
-    const cut = gs + 'V' + '\x00';
-
     const lines: string[] = [];
-    lines.push(init);
-    lines.push(alignCenter + doubleOn + boldOn + 'K. O. T.' + boldOff + doubleOff);
+    lines.push('K. O. T.');
     lines.push('------------------------------------------');
-    lines.push(alignCenter + doubleOn + boldOn + `TABLE: ${selectedTable?.name || 'TAKEAWAY'}` + boldOff + doubleOff);
+    lines.push(`TABLE: ${selectedTable?.name || 'TAKEAWAY'}`);
     if (customerName) {
-      lines.push(alignCenter + boldOn + `Cust: ${customerName}` + boldOff);
+      lines.push(`Cust: ${customerName}`);
     }
-    lines.push(alignCenter + `Time: ${timeLabel}`);
+    lines.push(`Time: ${timeLabel}`);
     lines.push('------------------------------------------');
-    lines.push(alignLeft + boldOn + padRight('ITEM', itemWidth) + ' ' + padLeft('QTY', qtyWidth) + boldOff);
-    itemLines.forEach(line => lines.push(alignLeft + line));
+    lines.push(padRight('ITEM', itemWidth) + ' ' + padLeft('QTY', qtyWidth));
+    itemLines.forEach(line => lines.push(line));
     lines.push('------------------------------------------');
-    lines.push(alignCenter + `Printed at ${printedAt}`);
-    lines.push('\n\n' + cut);
+    lines.push(`Printed at ${printedAt}`);
 
-    return lines.join('\n');
+    return lines;
   };
 
-  const resolveKotPrinterEndpoint = () => {
-    const raw = (restaurantInfo.kotPrinterIp || '').trim();
-    if (!raw) return '';
-    if (/^https?:\/\//i.test(raw)) return raw;
-    return `http://${raw}:9100/print`;
-  };
-
-  const sendKotToEscPos = async (selectedTable: Table | undefined) => {
-    const endpoint = resolveKotPrinterEndpoint();
-    if (!endpoint) return false;
-
+  const sendKotToPrintServer = async (selectedTable: Table | undefined) => {
     try {
-      const payload = buildKotEscPosText(selectedTable);
-      const encoder = new TextEncoder();
-      await fetch(endpoint, {
+      const payload = buildKotPrintLines(selectedTable);
+      const response = await fetch('http://localhost:3001/print-kot', {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: encoder.encode(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: payload })
       });
-      return true;
+      return response.ok;
     } catch (error) {
-      console.error('ESC/POS KOT print failed:', error);
+      console.error('Print server KOT failed:', error);
       return false;
     }
   };
