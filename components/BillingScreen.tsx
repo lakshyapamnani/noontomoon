@@ -927,17 +927,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       
       const encoder = new TextEncoder();
       const buffers: Uint8Array[] = [init, alignCenter, doubleOn];
-      
-      // Top header
-      buffers.push(encoder.encode(payloadLines[0] + '\n'));
+
+      const newline = '\r\n';
+      buffers.push(encoder.encode(payloadLines[0] + newline));
       buffers.push(doubleOff, alignLeft);
-      
-      // Remaining lines
-      payloadLines.slice(1).forEach(line => {
-        buffers.push(encoder.encode(line + '\n'));
-      });
-      
-      buffers.push(encoder.encode('\n\n\n\n'));
+
+      const remainingText = payloadLines.slice(1).join(newline) + newline;
+      if (remainingText.trim().length > 0) {
+        buffers.push(encoder.encode(remainingText));
+      }
+
+      buffers.push(encoder.encode(newline.repeat(4)));
       buffers.push(cut);
       
       const totalLength = buffers.reduce((acc, val) => acc + val.length, 0);
