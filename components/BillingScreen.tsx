@@ -315,6 +315,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const mobileItemsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileBillScrollRef = useRef<HTMLDivElement | null>(null);
   const kotSerialPortRef = useRef<SerialPortLike | null>(null);
+  const kotPrintErrorRef = useRef<string>('');
 
   const isDrinkCategory = useMemo(() => {
     const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
@@ -855,7 +856,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const sent = await sendKotDirectEscPos(selectedTable);
     if (!sent) {
-      alert('KOT print failed. On mobile use Chrome/Edge and allow USB Serial printer access, or configure print server fallback.');
+      const message = kotPrintErrorRef.current || 'KOT print failed. Please check printer connection.';
+      alert(message);
     }
   };
 
@@ -935,6 +937,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const sendKotDirectEscPos = async (selectedTable: Table | undefined) => {
+    kotPrintErrorRef.current = '';
+
     const concatBytes = (...parts: Uint8Array[]) => {
       const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
       const out = new Uint8Array(totalLength);
@@ -996,23 +1000,54 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     };
 
     const sendViaPrintServer = async (lines: string[]) => {
-      const printServerUrl = (restaurantInfo.printServerUrl || 'http://localhost:3001').replace(/\/$/, '');
       const printerIp = restaurantInfo.kotPrinterIp || '192.168.0.114';
-      const response = await fetch(`${printServerUrl}/print-kot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines, printerIp })
-      });
 
-      if (!response.ok) {
-        throw new Error(`Print server error: ${response.status}`);
+      const configured = (restaurantInfo.printServerUrl || 'http://localhost:3001').replace(/\/$/, '');
+      const candidates = new Set<string>([configured]);
+
+      const isLocalhostConfigured = /localhost|127\.0\.0\.1/i.test(configured);
+      if (isLocalhostConfigured && typeof window !== 'undefined') {
+        const host = window.location.hostname;
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+          candidates.add(`http://${host}:3001`);
+        }
       }
+
+      if (printerIp) {
+        candidates.add(`http://${printerIp}:3001`);
+      }
+
+      let lastError: unknown = null;
+      for (const baseUrl of candidates) {
+        try {
+          const response = await fetch(`${baseUrl}/print-kot`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lines, printerIp })
+          });
+          if (!response.ok) {
+            throw new Error(`Print server error: ${response.status}`);
+          }
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError || new Error('Unable to reach any print server endpoint.');
     };
 
     const payloadLines = buildKotPrintLines(selectedTable);
+    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
     try {
-      await sendViaWebSerial(payloadLines);
+      if (!isMobileDevice) {
+        await sendViaWebSerial(payloadLines);
+        return true;
+      }
+
+      // Mobile browsers commonly lack USB serial compatibility with receipt printers.
+      await sendViaPrintServer(payloadLines);
       return true;
     } catch (serialError) {
       console.warn('Web Serial KOT print failed, trying print server fallback:', serialError);
@@ -1021,6 +1056,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         return true;
       } catch (serverError) {
         console.error('KOT print failed on both Web Serial and print server:', serverError);
+        kotPrintErrorRef.current =
+          'No compatible devices found on phone. Set Print Server URL to your PC LAN IP (example: http://192.168.1.20:3001), keep print service running, and connect phone to same Wi-Fi.';
         return false;
       }
     }
