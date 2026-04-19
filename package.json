@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "preview:https": "vite preview --https"
+    "preview:https": "vite preview --https",
+    "print-server": "node print-service/server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
