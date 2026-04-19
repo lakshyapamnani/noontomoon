@@ -1415,6 +1415,7 @@ const App: React.FC = () => {
         onCreateOrder={handleCreateOrder}
         onUpdateTableStatus={handleUpdateTableStatus}
         onUpdateTableCarts={handleUpdateTableCarts}
+        billCounter={billCounter}
         variant="mobile"
       />
     );
