@@ -33,6 +33,25 @@ import TablesGrid from './TablesGrid';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
 
+type SerialPortLike = {
+  readable: ReadableStream<Uint8Array> | null;
+  writable: WritableStream<Uint8Array> | null;
+  open: (options: {
+    baudRate: number;
+    dataBits?: 7 | 8;
+    stopBits?: 1 | 2;
+    parity?: 'none' | 'even' | 'odd';
+    flowControl?: 'none' | 'hardware';
+  }) => Promise<void>;
+};
+
+type SerialNavigatorLike = Navigator & {
+  serial?: {
+    getPorts: () => Promise<SerialPortLike[]>;
+    requestPort: () => Promise<SerialPortLike>;
+  };
+};
+
 interface ItemOptionsPopupProps {
   item: MenuItem;
   onConfirm: (choice: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice: 'HALF' | 'FULL' | null, mlChoice?: string | null) => void;
@@ -295,6 +314,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [openItemForm, setOpenItemForm] = useState({ name: '', rate: '' });
   const mobileItemsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileBillScrollRef = useRef<HTMLDivElement | null>(null);
+  const kotSerialPortRef = useRef<SerialPortLike | null>(null);
 
   const isDrinkCategory = useMemo(() => {
     const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
@@ -915,51 +935,94 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const sendKotDirectEscPos = async (selectedTable: Table | undefined) => {
-    try {
-      const payloadLines = buildKotPrintLines(selectedTable);
-      
-      const init = new Uint8Array([0x1b, 0x40]);
-      const alignCenter = new Uint8Array([0x1b, 0x61, 0x01]);
-      const alignLeft = new Uint8Array([0x1b, 0x61, 0x00]);
-      const doubleOn = new Uint8Array([0x1d, 0x21, 0x11]);
-      const doubleOff = new Uint8Array([0x1d, 0x21, 0x00]);
-      const cut = new Uint8Array([0x1d, 0x56, 0x42, 0x00]);
-      
-      const encoder = new TextEncoder();
-      const buffers: Uint8Array[] = [init, alignCenter, doubleOn];
-
-      const newline = '\r\n';
-      buffers.push(encoder.encode(payloadLines[0] + newline));
-      buffers.push(doubleOff, alignLeft);
-
-      const remainingText = payloadLines.slice(1).join(newline) + newline;
-      if (remainingText.trim().length > 0) {
-        buffers.push(encoder.encode(remainingText));
-      }
-
-      buffers.push(encoder.encode(newline.repeat(4)));
-      buffers.push(cut);
-      
-      const totalLength = buffers.reduce((acc, val) => acc + val.length, 0);
-      const result = new Uint8Array(totalLength);
+    const concatBytes = (...parts: Uint8Array[]) => {
+      const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+      const out = new Uint8Array(totalLength);
       let offset = 0;
-      for (const array of buffers) {
-        result.set(array, offset);
-        offset += array.length;
+      parts.forEach((part) => {
+        out.set(part, offset);
+        offset += part.length;
+      });
+      return out;
+    };
+
+    const buildEscPosPayload = (lines: string[]) => {
+      const encoder = new TextEncoder();
+      const init = Uint8Array.from([0x1b, 0x40]);
+      const text = encoder.encode(`${lines.join('\r\n')}\r\n\r\n`);
+      const feedAndCut = Uint8Array.from([0x1b, 0x64, 0x03, 0x1d, 0x56, 0x42, 0x00]);
+      return concatBytes(init, text, feedAndCut);
+    };
+
+    const getOrRequestSerialPort = async (): Promise<SerialPortLike> => {
+      const serialNavigator = navigator as SerialNavigatorLike;
+      if (!serialNavigator.serial) {
+        throw new Error('Web Serial is not supported on this device/browser.');
       }
 
+      if (kotSerialPortRef.current) {
+        return kotSerialPortRef.current;
+      }
+
+      const existingPorts = await serialNavigator.serial.getPorts();
+      const port = existingPorts[0] || await serialNavigator.serial.requestPort();
+      kotSerialPortRef.current = port;
+      return port;
+    };
+
+    const sendViaWebSerial = async (lines: string[]) => {
+      const port = await getOrRequestSerialPort();
+      if (!port.writable) {
+        await port.open({
+          baudRate: 9600,
+          dataBits: 8,
+          stopBits: 1,
+          parity: 'none',
+          flowControl: 'none'
+        });
+      }
+
+      const payload = buildEscPosPayload(lines);
+      const writer = port.writable?.getWriter();
+      if (!writer) {
+        throw new Error('Unable to open printer write stream.');
+      }
+
+      try {
+        await writer.write(payload);
+      } finally {
+        writer.releaseLock();
+      }
+    };
+
+    const sendViaPrintServer = async (lines: string[]) => {
+      const printServerUrl = (restaurantInfo.printServerUrl || 'http://localhost:3001').replace(/\/$/, '');
       const printerIp = restaurantInfo.kotPrinterIp || '192.168.0.114';
-      await fetch(`http://${printerIp}:9100/`, {
+      const response = await fetch(`${printServerUrl}/print-kot`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: result
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines, printerIp })
       });
-      
-      // Some thermal printers don't return standard HTTP responses for port 9100
+
+      if (!response.ok) {
+        throw new Error(`Print server error: ${response.status}`);
+      }
+    };
+
+    const payloadLines = buildKotPrintLines(selectedTable);
+
+    try {
+      await sendViaWebSerial(payloadLines);
       return true;
-    } catch (error) {
-      console.error('Direct ESC/POS KOT failed:', error);
-      return false;
+    } catch (serialError) {
+      console.warn('Web Serial KOT print failed, trying print server fallback:', serialError);
+      try {
+        await sendViaPrintServer(payloadLines);
+        return true;
+      } catch (serverError) {
+        console.error('KOT print failed on both Web Serial and print server:', serverError);
+        return false;
+      }
     }
   };
 

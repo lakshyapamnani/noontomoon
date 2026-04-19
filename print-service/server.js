@@ -42,11 +42,11 @@ const escposBufferFromLines = (lines) => {
   return Buffer.concat(buffers);
 };
 
-const sendToPrinter = (payload) => new Promise((resolve, reject) => {
+const sendToPrinter = (payload, printerHost) => new Promise((resolve, reject) => {
   const socket = new net.Socket();
 
-  socket.connect(PRINTER_PORT, PRINTER_HOST, () => {
-    console.log('[print-service] Connected to printer', PRINTER_HOST, PRINTER_PORT);
+  socket.connect(PRINTER_PORT, printerHost, () => {
+    console.log('[print-service] Connected to printer', printerHost, PRINTER_PORT);
     socket.write(payload, (err) => {
       if (err) {
         reject(err);
@@ -66,6 +66,9 @@ const sendToPrinter = (payload) => new Promise((resolve, reject) => {
 app.post('/print-kot', async (req, res) => {
   console.log('[print-service] /print-kot request received');
   const lines = Array.isArray(req.body?.lines) ? req.body.lines : [];
+  const printerHost = typeof req.body?.printerIp === 'string' && req.body.printerIp.trim().length > 0
+    ? req.body.printerIp.trim()
+    : PRINTER_HOST;
   if (!lines.length) {
     res.status(400).json({ error: 'No lines provided' });
     return;
@@ -73,7 +76,7 @@ app.post('/print-kot', async (req, res) => {
 
   try {
     const payload = escposBufferFromLines(lines);
-    await sendToPrinter(payload);
+    await sendToPrinter(payload, printerHost);
     console.log('[print-service] KOT print success');
     res.json({ ok: true });
   } catch (error) {
