@@ -855,7 +855,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const sent = await sendKotDirectEscPos(selectedTable);
     if (!sent) {
-      alert('KOT print failed. Please check printer connection.');
+      alert('KOT print failed. On mobile use Chrome/Edge and allow USB Serial printer access, or configure print server fallback.');
     }
   };
 
