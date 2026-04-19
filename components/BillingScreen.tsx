@@ -3,7 +3,6 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { 
   ChefHat,
-  Printer,
   TrendingUp,
   ChevronDown,
   ChevronUp,
@@ -32,25 +31,6 @@ import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, Restaurant
 import TablesGrid from './TablesGrid';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
-
-type SerialPortLike = {
-  readable: ReadableStream<Uint8Array> | null;
-  writable: WritableStream<Uint8Array> | null;
-  open: (options: {
-    baudRate: number;
-    dataBits?: 7 | 8;
-    stopBits?: 1 | 2;
-    parity?: 'none' | 'even' | 'odd';
-    flowControl?: 'none' | 'hardware';
-  }) => Promise<void>;
-};
-
-type SerialNavigatorLike = Navigator & {
-  serial?: {
-    getPorts: () => Promise<SerialPortLike[]>;
-    requestPort: () => Promise<SerialPortLike>;
-  };
-};
 
 interface ItemOptionsPopupProps {
   item: MenuItem;
@@ -314,8 +294,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [openItemForm, setOpenItemForm] = useState({ name: '', rate: '' });
   const mobileItemsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileBillScrollRef = useRef<HTMLDivElement | null>(null);
-  const kotSerialPortRef = useRef<SerialPortLike | null>(null);
-  const kotPrintErrorRef = useRef<string>('');
 
   const isDrinkCategory = useMemo(() => {
     const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
@@ -848,17 +826,170 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }, 300000); // 5 minutes fallback
   };
 
+  const doIframeKotPrint = (selectedTable: Table | undefined) => {
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const now = new Date();
+    const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const printedAt = now.toLocaleString();
+    const tableName = selectedTable?.name || 'TAKEAWAY';
+
+    const itemRows = currentCart.map((item) => {
+      const optionTags: string[] = [];
+      if (item.selectedPortion) optionTags.push(item.selectedPortion === 'HALF' ? 'HALF' : 'FULL');
+      if (item.selectedVegChoice) optionTags.push(item.selectedVegChoice);
+      if (item.selectedMl) optionTags.push(item.selectedMl);
+
+      return `
+        <div class="item-row">
+          <div class="item-name">${escapeHtml(item.name.toUpperCase())}</div>
+          <div class="item-qty">${item.quantity}</div>
+        </div>
+        ${optionTags.length ? `<div class="item-option">(${escapeHtml(optionTags.join(' | '))})</div>` : ''}
+      `;
+    }).join('');
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      alert('Unable to create print frame.');
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    const html = `
+      <html>
+        <head>
+          <title>KOT</title>
+          <style>
+            @page { margin: 0; size: 80mm auto; }
+            @media print {
+              @page { margin: 0; }
+              body { margin: 0; }
+            }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: 'Courier New', monospace;
+              width: 76mm;
+              max-width: 76mm;
+              margin: 0 auto;
+              padding: 3mm 3mm 2mm;
+              font-size: 12px;
+              line-height: 1.25;
+              color: #000;
+            }
+            .center { text-align: center; }
+            .kot-title {
+              font-size: 20px;
+              font-weight: 900;
+              letter-spacing: 1px;
+              margin-bottom: 4px;
+            }
+            .divider {
+              border-top: 2px dashed #000;
+              margin: 5px 0;
+            }
+            .meta {
+              font-weight: 700;
+              margin: 2px 0;
+            }
+            .head-row,
+            .item-row {
+              display: flex;
+              justify-content: space-between;
+              gap: 6px;
+            }
+            .head-row {
+              font-weight: 900;
+              margin-top: 4px;
+              margin-bottom: 3px;
+            }
+            .item-row {
+              margin: 2px 0;
+              font-weight: 700;
+            }
+            .item-name {
+              flex: 1;
+              min-width: 0;
+              word-break: break-word;
+            }
+            .item-qty {
+              width: 26px;
+              text-align: right;
+              flex-shrink: 0;
+            }
+            .item-option {
+              font-size: 10px;
+              margin: 0 0 2px 6px;
+            }
+            .printed-at {
+              margin-top: 6px;
+              font-size: 10px;
+              text-align: center;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="center kot-title">K. O. T.</div>
+          <div class="divider"></div>
+          <div class="meta">TABLE: ${escapeHtml(tableName)}</div>
+          ${customerName ? `<div class="meta">CUST: ${escapeHtml(customerName)}</div>` : ''}
+          <div class="meta">TIME: ${escapeHtml(timeLabel)}</div>
+          <div class="divider"></div>
+          <div class="head-row">
+            <div>ITEM</div>
+            <div class="item-qty">QTY</div>
+          </div>
+          ${itemRows}
+          <div class="divider"></div>
+          <div class="printed-at">Printed at ${escapeHtml(printedAt)}</div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => {
+                window.parent.postMessage('print-done', '*');
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data === 'print-done') {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    setTimeout(() => {
+      if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      window.removeEventListener('message', handleMessage);
+    }, 300000);
+  };
+
   const printKOT = async () => {
     if (currentCart.length === 0) {
       alert("Please add items to the cart first.");
       return;
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    const sent = await sendKotDirectEscPos(selectedTable);
-    if (!sent) {
-      const message = kotPrintErrorRef.current || 'KOT print failed. Please check printer connection.';
-      alert(message);
-    }
+    doIframeKotPrint(selectedTable);
   };
 
   const buildKotPrintLines = (selectedTable: Table | undefined) => {
@@ -935,134 +1066,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
     return lines;
   };
-
-  const sendKotDirectEscPos = async (selectedTable: Table | undefined) => {
-    kotPrintErrorRef.current = '';
-
-    const concatBytes = (...parts: Uint8Array[]) => {
-      const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
-      const out = new Uint8Array(totalLength);
-      let offset = 0;
-      parts.forEach((part) => {
-        out.set(part, offset);
-        offset += part.length;
-      });
-      return out;
-    };
-
-    const buildEscPosPayload = (lines: string[]) => {
-      const encoder = new TextEncoder();
-      const init = Uint8Array.from([0x1b, 0x40]);
-      const text = encoder.encode(`${lines.join('\r\n')}\r\n\r\n`);
-      const feedAndCut = Uint8Array.from([0x1b, 0x64, 0x03, 0x1d, 0x56, 0x42, 0x00]);
-      return concatBytes(init, text, feedAndCut);
-    };
-
-    const getOrRequestSerialPort = async (): Promise<SerialPortLike> => {
-      const serialNavigator = navigator as SerialNavigatorLike;
-      if (!serialNavigator.serial) {
-        throw new Error('Web Serial is not supported on this device/browser.');
-      }
-
-      if (kotSerialPortRef.current) {
-        return kotSerialPortRef.current;
-      }
-
-      const existingPorts = await serialNavigator.serial.getPorts();
-      const port = existingPorts[0] || await serialNavigator.serial.requestPort();
-      kotSerialPortRef.current = port;
-      return port;
-    };
-
-    const sendViaWebSerial = async (lines: string[]) => {
-      const port = await getOrRequestSerialPort();
-      if (!port.writable) {
-        await port.open({
-          baudRate: 9600,
-          dataBits: 8,
-          stopBits: 1,
-          parity: 'none',
-          flowControl: 'none'
-        });
-      }
-
-      const payload = buildEscPosPayload(lines);
-      const writer = port.writable?.getWriter();
-      if (!writer) {
-        throw new Error('Unable to open printer write stream.');
-      }
-
-      try {
-        await writer.write(payload);
-      } finally {
-        writer.releaseLock();
-      }
-    };
-
-    const sendViaPrintServer = async (lines: string[]) => {
-      const printerIp = restaurantInfo.kotPrinterIp || '192.168.0.114';
-
-      const configured = (restaurantInfo.printServerUrl || 'http://localhost:3001').replace(/\/$/, '');
-      const candidates = new Set<string>([configured]);
-
-      const isLocalhostConfigured = /localhost|127\.0\.0\.1/i.test(configured);
-      if (isLocalhostConfigured && typeof window !== 'undefined') {
-        const host = window.location.hostname;
-        if (host && host !== 'localhost' && host !== '127.0.0.1') {
-          candidates.add(`http://${host}:3001`);
-        }
-      }
-
-      if (printerIp) {
-        candidates.add(`http://${printerIp}:3001`);
-      }
-
-      let lastError: unknown = null;
-      for (const baseUrl of candidates) {
-        try {
-          const response = await fetch(`${baseUrl}/print-kot`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lines, printerIp })
-          });
-          if (!response.ok) {
-            throw new Error(`Print server error: ${response.status}`);
-          }
-          return;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-
-      throw lastError || new Error('Unable to reach any print server endpoint.');
-    };
-
-    const payloadLines = buildKotPrintLines(selectedTable);
-    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-
-    try {
-      if (!isMobileDevice) {
-        await sendViaWebSerial(payloadLines);
-        return true;
-      }
-
-      // Mobile browsers commonly lack USB serial compatibility with receipt printers.
-      await sendViaPrintServer(payloadLines);
-      return true;
-    } catch (serialError) {
-      console.warn('Web Serial KOT print failed, trying print server fallback:', serialError);
-      try {
-        await sendViaPrintServer(payloadLines);
-        return true;
-      } catch (serverError) {
-        console.error('KOT print failed on both Web Serial and print server:', serverError);
-        kotPrintErrorRef.current =
-          'No compatible devices found on phone. Set Print Server URL to your PC LAN IP (example: http://192.168.1.20:3001), keep print service running, and connect phone to same Wi-Fi.';
-        return false;
-      }
-    }
-  };
-
 
   const handlePlaceOrder = async (print = false, shouldCheckout = true) => {
     const selectedTableItems = selectedTableId

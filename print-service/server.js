@@ -5,10 +5,15 @@ const net = require('net');
 const PRINTER_HOST = '192.168.0.102';
 const PRINTER_PORT = 9100;
 const SERVER_PORT = 3001;
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || '';
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '256kb' }));
+
+app.get('/health', (_req, res) => {
+  res.json({ ok: true, service: 'print-service' });
+});
 
 const escposBufferFromLines = (lines) => {
   const init = Buffer.from([0x1b, 0x40]);
@@ -87,4 +92,10 @@ app.post('/print-kot', async (req, res) => {
 
 app.listen(SERVER_PORT, () => {
   console.log(`[print-service] Listening on http://localhost:${SERVER_PORT}`);
+  if (PUBLIC_BASE_URL) {
+    console.log(`[print-service] Public URL configured: ${PUBLIC_BASE_URL}`);
+    console.log('[print-service] Use this HTTPS URL in app Print Server URL when frontend is hosted on Vercel.');
+  } else {
+    console.log('[print-service] If frontend is hosted on Vercel, expose this service over HTTPS tunnel and set that URL as Print Server URL.');
+  }
 });
