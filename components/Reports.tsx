@@ -347,10 +347,10 @@ const Reports: React.FC<ReportsProps> = ({ orders, onStartNewDay }) => {
             <button
               onClick={async () => {
                 if (!onStartNewDay) return;
-                if (!confirm('Start new day? This will reset invoice numbers to INV-1. Continue?')) return;
+                if (!confirm("Start new day? This will clear today's orders and reset invoice numbers to INV-1. Older orders will be kept. Continue?")) return;
                 try {
                   await onStartNewDay();
-                  alert('Invoice counter reset. Next bill will be INV-1.');
+                  alert("New day started. Today's orders cleared. Next bill will be INV-1.");
                 } catch (err) {
                   console.error('Start New Day error', err);
                   alert('Failed to reset invoice counter. See console for details.');

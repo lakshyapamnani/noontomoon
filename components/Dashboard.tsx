@@ -6,26 +6,19 @@ import {
 import { TrendingUp, ShoppingBag, DollarSign, Clock, Users } from 'lucide-react';
 import { Order, PaymentMode } from '../types';
 import { COLORS, INITIAL_CATEGORIES } from '../constants';
+import { isOrderInCurrentBusinessDay } from '../utils/businessDay';
 
 interface DashboardProps {
   orders: Order[];
+  lastNewDayAt?: string | null;
   onResetCounter?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ orders, onResetCounter }) => {
+const Dashboard: React.FC<DashboardProps> = ({ orders, lastNewDayAt = null, onResetCounter }) => {
   const stats = useMemo(() => {
-    const now = new Date();
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const isOrderToday = (o: Order) => {
-      const d = o.date;
-      if (!d) return false;
-      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d === todayKey;
-      const parsed = new Date(d);
-      if (isNaN(parsed.getTime())) return false;
-      const orderKey = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
-      return orderKey === todayKey;
-    };
-    const todayOrders = orders.filter(o => isOrderToday(o) && o.status !== 'CANCELLED');
+    const todayOrders = orders.filter(
+      o => isOrderInCurrentBusinessDay(o, lastNewDayAt) && o.status !== 'CANCELLED'
+    );
     const totalSales = todayOrders.reduce((acc, o) => acc + o.total, 0);
     const pendingOrders = orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
     const avgOrderValue = todayOrders.length > 0 ? totalSales / todayOrders.length : 0;
@@ -82,7 +75,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders, onResetCounter }) => {
       categoryDistribution,
       paymentDistribution
     };
-  }, [orders]);
+  }, [orders, lastNewDayAt]);
 
   const PIE_COLORS = [COLORS.primary, '#262626', '#4b5563', '#9ca3af', '#d1d5db'];
 

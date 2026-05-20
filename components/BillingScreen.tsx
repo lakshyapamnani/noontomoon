@@ -19,7 +19,6 @@ import {
   CreditCard,
   Banknote,
   Truck,
-  Package,
   UtensilsCrossed,
   Utensils,
   Users,
@@ -241,6 +240,19 @@ const normalizeTableCart = (value: unknown): TableCart => {
   };
 };
 
+const mergeCartItems = (existing: CartItem[], incoming: CartItem[]): CartItem[] => {
+  const merged = [...existing];
+  incoming.forEach(item => {
+    const idx = merged.findIndex(i => i.id === item.id);
+    if (idx >= 0) {
+      merged[idx] = { ...merged[idx], quantity: merged[idx].quantity + item.quantity };
+    } else {
+      merged.push(item);
+    }
+  });
+  return merged;
+};
+
 interface BillingScreenProps {
   categories: Category[];
   menuItems: MenuItem[];
@@ -278,7 +290,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || '');
   const [selectedTableId, setSelectedTableId] = useState<string | null>(selectedTableIdProp ?? null);
-  const [orderType, setOrderType] = useState<OrderType>('PICK_UP');
+  const [orderType, setOrderType] = useState<OrderType>('DELIVERY');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
   const [optionsItem, setOptionsItem] = useState<MenuItem | null>(null);
   const [menuType, setMenuType] = useState<'FOOD' | 'DRINK'>('FOOD');
@@ -352,7 +364,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   useEffect(() => {
     if (variant !== 'desktop') return;
     setSelectedTableId(selectedTableIdProp ?? null);
-    setOrderType(selectedTableIdProp ? 'DINE_IN' : 'PICK_UP');
+    setOrderType(selectedTableIdProp ? 'DINE_IN' : 'DELIVERY');
   }, [variant, selectedTableIdProp]);
   
   // Get current cart based on selected table or default cart for non-dine-in
@@ -391,6 +403,47 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       }));
     } else {
       setDefaultCustomerName(name);
+    }
+  };
+
+  const handleShiftTable = (targetTableId: string) => {
+    if (!targetTableId) return;
+
+    if (targetTableId === selectedTableId && orderType === 'DINE_IN') {
+      return;
+    }
+
+    const sourceItems = [...currentCart];
+    const sourceCustomerName = customerName;
+    const sourceTableId = orderType === 'DINE_IN' && selectedTableId ? selectedTableId : null;
+
+    const targetCart = normalizeTableCart(tableCarts[targetTableId]);
+    const mergedItems = mergeCartItems(toCartItemsArray(targetCart.items), sourceItems);
+    const mergedCustomerName = sourceCustomerName || targetCart.customerName;
+
+    const newTableCarts = { ...tableCarts };
+    newTableCarts[targetTableId] = { items: mergedItems, customerName: mergedCustomerName };
+
+    if (sourceTableId && sourceTableId !== targetTableId) {
+      newTableCarts[sourceTableId] = { items: [], customerName: '' };
+      onUpdateTableStatus(sourceTableId, 'AVAILABLE');
+    }
+
+    onUpdateTableCarts(newTableCarts);
+
+    if (!sourceTableId && sourceItems.length > 0) {
+      setDefaultCart([]);
+      setDefaultCustomerName('');
+    }
+
+    setSelectedTableId(targetTableId);
+    setOrderType('DINE_IN');
+
+    if (mergedItems.length > 0) {
+      const targetTable = tables.find(t => t.id === targetTableId);
+      if (targetTable?.status === 'AVAILABLE') {
+        onUpdateTableStatus(targetTableId, 'OCCUPIED');
+      }
     }
   };
 
@@ -1731,10 +1784,30 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           </div>
         )}
         
-        <div className="flex p-3 bg-gray-100 border-b gap-1">
+        <div className="flex p-3 bg-gray-100 border-b gap-1 items-stretch">
           <OrderTypeTab active={orderType === 'DINE_IN'} onClick={() => setOrderType('DINE_IN')} label="Dine In" icon={<UtensilsCrossed size={16} />} />
           <OrderTypeTab active={orderType === 'DELIVERY'} onClick={() => setOrderType('DELIVERY')} label="Delivery" icon={<Truck size={16} />} />
-          <OrderTypeTab active={orderType === 'PICK_UP'} onClick={() => setOrderType('PICK_UP')} label="Pick Up" icon={<Package size={16} />} />
+          <div className="flex-1 min-w-0 relative">
+            <select
+              value={orderType === 'DINE_IN' && selectedTableId ? selectedTableId : ''}
+              onChange={(e) => {
+                const tableId = e.target.value;
+                if (tableId) handleShiftTable(tableId);
+              }}
+              className="w-full h-full min-h-[40px] pl-3 pr-8 py-2 rounded-xl text-xs font-black bg-white border border-gray-200 text-gray-800 appearance-none cursor-pointer focus:ring-2 focus:ring-[#F57C00] outline-none"
+            >
+              <option value="" disabled>Shift to table</option>
+              {tables.map(table => {
+                const itemCount = getTableItemCount(table.id);
+                return (
+                  <option key={table.id} value={table.id}>
+                    {table.name}{itemCount > 0 ? ` (${itemCount})` : ''}
+                  </option>
+                );
+              })}
+            </select>
+            <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
         </div>
 
         <div className="p-4 border-b bg-white">
