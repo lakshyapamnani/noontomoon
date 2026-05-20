@@ -616,18 +616,21 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     return acc;
   }, { gst: 0, vat: 0 });
 
-  const discountAmount = discountType === 'PERCENT'
-    ? foodSubtotal * (discountValue / 100)
-    : Math.min(foodSubtotal, discountValue);
-  
-  const discountedFoodSubtotal = foodSubtotal - discountAmount;
-  const discountedSubtotal = discountedFoodSubtotal + drinkSubtotal;
-  
-  // GST recalculated on discounted food; VAT (on drinks) stays unchanged
-  const gst = taxInfo.gst * (discountedFoodSubtotal / (foodSubtotal || 1));
+  // Tax is computed on full subtotals (before discount)
+  const gst = taxInfo.gst;
   const vat = taxInfo.vat;
   const tax = gst + vat;
-  const total = discountedSubtotal + tax;
+  const totalBeforeDiscount = subtotal + tax;
+
+  // Discount applied after tax
+  let discountAmount = 0;
+  if (discountType === 'PERCENT') {
+    discountAmount = totalBeforeDiscount * (discountValue / 100);
+  } else {
+    discountAmount = Math.min(totalBeforeDiscount, discountValue);
+  }
+
+  const total = totalBeforeDiscount - discountAmount;
 
   const printReceipt = async (order: Order) => {
     // Compute GST/VAT for this order using category tax types
@@ -709,6 +712,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           <div class="center bold" style="font-size: 16px; margin: 5px 0;">TAX INVOICE</div>
           <div class="line"></div>
           <div>Invoice No: ${order.billNo}</div>
+          ${order.tableName ? '<div>Table: ' + order.tableName + '</div>' : ''}
           ${order.customerName ? '<div>Cust: ' + order.customerName + '</div>' : ''}
           <div>Date: ${order.date}</div>
           <div>Time: ${order.time}</div>
@@ -777,15 +781,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
+          ${orderGst > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
+          ${orderVat > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
+          <div class="row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
           ${order.discountAmount && order.discountAmount > 0 ? `
             <div class="row" style="color: #000;">
               <span>Discount (${order.discountPercent}%):</span>
               <span>-Rs ${order.discountAmount.toFixed(0)}</span>
             </div>
           ` : ''}
-          ${orderGst > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
-          ${orderVat > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
-          <div class="row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
           <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center bold">Paid via ${order.paymentMode}</div>
@@ -1096,14 +1100,21 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }, 0);
 
     const checkoutSubtotal = checkoutFoodSubtotal + checkoutDrinkSubtotal;
-    const checkoutDiscountAmount = discountType === 'PERCENT'
-      ? checkoutFoodSubtotal * (discountValue / 100)
-      : Math.min(checkoutFoodSubtotal, discountValue);
-    const checkoutDiscountedFood = checkoutFoodSubtotal - checkoutDiscountAmount;
-    const checkoutFoodTax = checkoutDiscountedFood * taxRate;
+
+    // Taxes are computed on full subtotals (before discount)
+    const checkoutFoodTax = checkoutFoodSubtotal * taxRate;
     const checkoutDrinkTax = checkoutDrinkSubtotal * drinkTaxRate;
     const checkoutTax = checkoutFoodTax + checkoutDrinkTax;
-    const checkoutTotal = (checkoutDiscountedFood + checkoutDrinkSubtotal) + checkoutTax;
+    const checkoutTotalBeforeDiscount = checkoutSubtotal + checkoutTax;
+
+    // Discount applied after tax
+    let checkoutDiscountAmount = 0;
+    if (discountType === 'PERCENT') {
+      checkoutDiscountAmount = checkoutTotalBeforeDiscount * (discountValue / 100);
+    } else {
+      checkoutDiscountAmount = Math.min(checkoutTotalBeforeDiscount, discountValue);
+    }
+    const checkoutTotal = checkoutTotalBeforeDiscount - checkoutDiscountAmount;
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const d = new Date();
@@ -1841,12 +1852,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   <span>Subtotal</span>
                   <span>₹{subtotal.toFixed(0)}</span>
                 </div>
-                {discountAmount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Discount ({discountType === 'PERCENT' ? `${discountValue}%` : `Fixed`})</span>
-                    <span>-₹{discountAmount.toFixed(0)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-gray-400 font-medium">
                   <span>GST (Food ${(taxRate * 100).toFixed(0)}%)</span>
                   <span>₹{gst.toFixed(0)}</span>
@@ -1859,6 +1864,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   <span>Tax Total</span>
                   <span>₹{tax.toFixed(0)}</span>
                 </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount ({discountType === 'PERCENT' ? `${discountValue}%` : `Fixed`})</span>
+                    <span>-₹{discountAmount.toFixed(0)}</span>
+                  </div>
+                )}
               </div>
             </>
           )}

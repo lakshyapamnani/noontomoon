@@ -25,9 +25,10 @@ import { Order } from '../types';
 
 interface ReportsProps {
   orders: Order[];
+  onStartNewDay?: () => Promise<void>;
 }
 
-const Reports: React.FC<ReportsProps> = ({ orders }) => {
+const Reports: React.FC<ReportsProps> = ({ orders, onStartNewDay }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [paymentMode, setPaymentMode] = useState('All');
@@ -342,6 +343,22 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
               className="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 bg-[#F57C00] text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-black hover:bg-orange-600 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FileText size={16} /> <span className="hidden sm:inline">Print</span> PDF
+            </button>
+            <button
+              onClick={async () => {
+                if (!onStartNewDay) return;
+                if (!confirm('Start new day? This will reset invoice numbers to INV-1. Continue?')) return;
+                try {
+                  await onStartNewDay();
+                  alert('Invoice counter reset. Next bill will be INV-1.');
+                } catch (err) {
+                  console.error('Start New Day error', err);
+                  alert('Failed to reset invoice counter. See console for details.');
+                }
+              }}
+              className="flex-1 md:flex-none flex items-center justify-center gap-1 md:gap-2 bg-red-600 text-white px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-black hover:bg-red-700 transition-all shadow-sm active:scale-95"
+            >
+              <Clock size={16} /> <span className="hidden sm:inline">Start New Day</span>
             </button>
           </div>
         </div>
