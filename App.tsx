@@ -50,6 +50,7 @@ import MenuManagement from './components/MenuManagement';
 import TablesGrid from './components/TablesGrid';
 
 // Firebase imports
+import { isOrderInCurrentBusinessDay } from './utils/businessDay';
 import { db, auth } from './firebase';
 import { ref, onValue, set, push, update, get } from 'firebase/database';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -121,6 +122,7 @@ const App: React.FC = () => {
   });
   const [orders, setOrders] = useState<Order[]>([]);  // Orders are stored in Firebase only
   const [billCounter, setBillCounter] = useState<number>(0);  // Sequential bill counter synced from Firebase
+  const [lastNewDayAt, setLastNewDayAt] = useState<string | null>(null);
   const [tables, setTables] = useState<Table[]>(() => {
     const saved = localStorage.getItem('drona_tables');
     return saved ? JSON.parse(saved) : [];
@@ -540,6 +542,9 @@ const App: React.FC = () => {
           setDrinkTaxRate(data.drinkTaxRate);
           localStorage.setItem('drona_drink_tax_rate', data.drinkTaxRate.toString());
         }
+        if (data.lastNewDayAt !== undefined) {
+          setLastNewDayAt(data.lastNewDayAt || null);
+        }
       }
     });
 
@@ -693,6 +698,35 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Firebase Error (Reset Counter):", error);
       alert("Failed to reset counter. Please check your connection.");
+    }
+  };
+
+  const handleStartNewDay = async () => {
+    const sessionOrderIds = orders
+      .filter(o => isOrderInCurrentBusinessDay(o, lastNewDayAt))
+      .map(o => o.id);
+    const newSessionStart = new Date().toISOString();
+
+    try {
+      await set(ref(db, userPath('bill_counter')), 0);
+      setBillCounter(0);
+
+      if (sessionOrderIds.length > 0) {
+        const deleteUpdates: Record<string, null> = {};
+        sessionOrderIds.forEach(id => {
+          deleteUpdates[userPath(`orders/${id}`)] = null;
+        });
+        await update(ref(db), deleteUpdates);
+        setOrders(prev => prev.filter(o => !sessionOrderIds.includes(o.id)));
+      }
+
+      await update(ref(db, userPath('settings')), { lastNewDayAt: newSessionStart });
+      setLastNewDayAt(newSessionStart);
+
+      console.log("New day started: bill counter reset, session orders cleared");
+    } catch (error) {
+      console.error("Firebase Error (Start New Day):", error);
+      throw error;
     }
   };
 
@@ -1304,7 +1338,7 @@ const App: React.FC = () => {
           />
         );
       case 'DASHBOARD':
-        return <Dashboard orders={orders} onResetCounter={handleResetBillCounter} />;
+        return <Dashboard orders={orders} lastNewDayAt={lastNewDayAt} onResetCounter={handleResetBillCounter} />;
       case 'LIVE_ORDERS':
         return (
           <OrdersList
@@ -1322,6 +1356,7 @@ const App: React.FC = () => {
           <OrdersList
             title="All Bills"
             orders={orders}
+            lastNewDayAt={lastNewDayAt}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
@@ -1354,7 +1389,7 @@ const App: React.FC = () => {
           />
         );
       case 'REPORTS':
-        return <Reports orders={orders} onStartNewDay={handleResetBillCounter} />;
+        return <Reports orders={orders} onStartNewDay={handleStartNewDay} />;
       case 'MENU_CONFIG':
         return (
           <MenuManagement

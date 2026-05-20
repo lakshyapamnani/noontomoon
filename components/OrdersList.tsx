@@ -29,6 +29,7 @@ import {
   Wallet
 } from 'lucide-react';
 import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
+import { isOrderInCurrentBusinessDay } from '../utils/businessDay';
 
 const formatItemDisplay = (it: CartItem) => {
   return `${it.name} x ${it.quantity}`;
@@ -37,6 +38,7 @@ const formatItemDisplay = (it: CartItem) => {
 interface OrdersListProps {
   title: string;
   orders: Order[];
+  lastNewDayAt?: string | null;
   onUpdateStatus: (id: string, status: OrderStatus) => void;
   onDeleteOrder: (id: string) => void;
   restaurantInfo: RestaurantInfo;
@@ -45,7 +47,7 @@ interface OrdersListProps {
   categories?: Category[];
 }
 
-const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [] }) => {
+const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = null, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [] }) => {
   const isAllBillsView = title === "All Bills";
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ALL'>('TODAY');
   const [kotCategoryId, setKotCategoryId] = useState<string>('all');
@@ -60,25 +62,13 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
   // Ensure orders is always an array
   const safeOrders = orders || [];
   
-  // Use calendar-day comparison so "Today's Orders" works across app restarts
-  // (toLocaleDateString() can return different formats between sessions)
+  // Today's orders = current business session (since last Start New Day), not midnight
   const { todayOrders, allOrders } = useMemo(() => {
-    const now = new Date();
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const isOrderToday = (o: Order) => {
-      const d = o.date;
-      if (!d) return false;
-      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d === todayKey;
-      const parsed = new Date(d);
-      if (isNaN(parsed.getTime())) return false;
-      const orderKey = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
-      return orderKey === todayKey;
-    };
     return {
-      todayOrders: safeOrders.filter(isOrderToday),
+      todayOrders: safeOrders.filter(o => isOrderInCurrentBusinessDay(o, lastNewDayAt)),
       allOrders: safeOrders
     };
-  }, [safeOrders]);
+  }, [safeOrders, lastNewDayAt]);
 
   // Derive available months from orders for the month dropdown
   const availableMonths = useMemo(() => {
