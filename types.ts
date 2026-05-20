@@ -29,6 +29,8 @@ export interface RestaurantInfo {
   billPrinterIp?: string;
   kotPrinterIp?: string;
   useUsbForBill?: boolean;
+  /** Minutes after a KOT print during which re-print includes full cart; after that, only new items. */
+  kotMergeWindowMinutes?: number;
 }
 
 export type VegType = 'VEG' | 'NON_VEG' | 'SEAFOOD' | 'BOTH';
@@ -64,9 +66,15 @@ export interface CartItem extends MenuItem {
   selectedMl?: string;
 }
 
+export interface KotPrintState {
+  lastPrintedAt: number;
+  printedItems: Record<string, number>;
+}
+
 export interface TableCart {
   items: CartItem[];
   customerName: string;
+  kotPrintState?: KotPrintState;
 }
 
 export interface Order {
