@@ -193,6 +193,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           <div class="center bold">DUPLICATE BILL</div>
           <div class="line"></div>
           <div>Bill: ${order.billNo}</div>
+          ${order.tableName ? `<div>Table: ${order.tableName}</div>` : ''}
           ${order.customerName ? `<div>Cust: ${order.customerName}</div>` : ''}
           <div>Date: ${order.date}</div>
           <div>Time: ${order.time}</div>
@@ -214,6 +215,8 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           <div class="item-row"><span>Subtotal:</span><span>₹${order.subtotal.toFixed(0)}</span></div>
           <div class="item-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>₹${gstAmt.toFixed(0)}</span></div>
           <div class="item-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>₹${vatAmt.toFixed(0)}</span></div>
+          <div class="item-row"><span>Tax Total:</span><span>₹${(gstAmt + vatAmt).toFixed(0)}</span></div>
+          ${order.discountAmount && order.discountAmount > 0 ? `<div class="item-row"><span>Discount (${order.discountPercent || 0}%):</span><span>-₹${order.discountAmount.toFixed(0)}</span></div>` : ''}
           <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${order.total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center">Paid via ${order.paymentMode}</div>
@@ -438,10 +441,27 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
       })
       .join('');
 
-    // Compute grand total across all categories
+    // Compute grand total across all categories (items only)
     const grandTotal = orderedSections.reduce((sum, { data: cat }) => {
       return sum + Object.values(cat.items).reduce((s, r) => s + r.total, 0);
     }, 0);
+
+    // Compute taxes and collected totals across selected orders
+    let totalGst = 0;
+    let totalVat = 0;
+    let totalDiscounts = 0;
+    let totalCollected = 0;
+    data.forEach(order => {
+      (order.items || []).forEach(it => {
+        const cat = categories.find(c => c.id === it.categoryId);
+        const taxType = cat?.taxType || (cat?.type === 'DRINK' ? 'VAT' : 'GST');
+        const itemSubtotal = (it.price || 0) * (it.quantity || 0);
+        if (taxType === 'VAT') totalVat += itemSubtotal * drinkTaxRate;
+        else totalGst += itemSubtotal * taxRate;
+      });
+      totalDiscounts += order.discountAmount || 0;
+      totalCollected += order.total || 0; // total already includes tax and discounts
+    });
 
     const html = `
       <html>
@@ -487,9 +507,30 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, onUpdateStatus, 
           ${sectionHtml || '<div class="center sub">No items</div>'}
           <div class="line"></div>
           <div class="row grand-total">
-            <span class="name">GRAND TOTAL</span>
+            <span class="name">GRAND TOTAL (Items)</span>
             <span class="qty"></span>
             <span class="amt">₹${grandTotal.toFixed(0)}</span>
+          </div>
+          <div class="row">
+            <span class="name">GST Total</span>
+            <span class="qty"></span>
+            <span class="amt">₹${totalGst.toFixed(0)}</span>
+          </div>
+          <div class="row">
+            <span class="name">VAT Total</span>
+            <span class="qty"></span>
+            <span class="amt">₹${totalVat.toFixed(0)}</span>
+          </div>
+          <div class="row">
+            <span class="name">Tax Total</span>
+            <span class="qty"></span>
+            <span class="amt">₹${(totalGst + totalVat).toFixed(0)}</span>
+          </div>
+          ${totalDiscounts > 0 ? `<div class="row"><span class="name">Discounts</span><span class="qty"></span><span class="amt">-₹${totalDiscounts.toFixed(0)}</span></div>` : ''}
+          <div class="row grand-total">
+            <span class="name">TOTAL COLLECTED</span>
+            <span class="qty"></span>
+            <span class="amt">₹${totalCollected.toFixed(0)}</span>
           </div>
           <div class="line"></div>
           <div class="center sub" style="margin-top:6px;">End of summary</div>

@@ -1019,10 +1019,7 @@ const App: React.FC = () => {
     const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
     const customerName = cart.customerName || 'Guest';
     const discountPercent = 0; // Default for table previews unless we add a UI for it later
-    const discountAmount = subtotal * (discountPercent / 100);
-    const discountedSubtotal = subtotal - discountAmount;
-    
-    // Calculate accurate GST and VAT
+    // Calculate accurate GST and VAT (on full subtotals)
     const taxInfo = items.reduce((acc, it) => {
       const cat = categories.find(c => String(c.id) === String(it.categoryId));
       const taxType = cat?.taxType || (cat?.type === 'DRINK' ? 'VAT' : 'GST');
@@ -1036,11 +1033,13 @@ const App: React.FC = () => {
       return acc;
     }, { gst: 0, vat: 0 });
 
-    const discountFactor = discountedSubtotal / (subtotal || 1);
-    const gstAmount = taxInfo.gst * discountFactor;
-    const vatAmount = taxInfo.vat * discountFactor;
+    const gstAmount = taxInfo.gst;
+    const vatAmount = taxInfo.vat;
     const taxAmount = gstAmount + vatAmount;
-    const total = discountedSubtotal + taxAmount;
+
+    const totalBeforeDiscount = subtotal + taxAmount;
+    const discountAmount = totalBeforeDiscount * (discountPercent / 100);
+    const total = totalBeforeDiscount - discountAmount;
 
     // iframe print
     const iframe = document.createElement('iframe');
@@ -1167,15 +1166,15 @@ const App: React.FC = () => {
 
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${subtotal.toFixed(0)}</span></div>
+          ${gstAmount > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${gstAmount.toFixed(0)}</span></div>` : ''}
+          ${vatAmount > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${vatAmount.toFixed(0)}</span></div>` : ''}
+          <div class="row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
           ${discountAmount > 0 ? `
             <div class="row">
               <span>Discount (${discountPercent}%):</span>
               <span>-Rs ${discountAmount.toFixed(0)}</span>
             </div>
           ` : ''}
-          ${gstAmount > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${gstAmount.toFixed(0)}</span></div>` : ''}
-          ${vatAmount > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${vatAmount.toFixed(0)}</span></div>` : ''}
-          <div class="row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
           <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${total.toFixed(0)}</span></div>
           <div class="line"></div>
           <div class="center bold">Not Paid Yet</div>
@@ -1355,7 +1354,7 @@ const App: React.FC = () => {
           />
         );
       case 'REPORTS':
-        return <Reports orders={orders} />;
+        return <Reports orders={orders} onStartNewDay={handleResetBillCounter} />;
       case 'MENU_CONFIG':
         return (
           <MenuManagement
