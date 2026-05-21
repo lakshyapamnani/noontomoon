@@ -587,23 +587,6 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                      <p className="text-xs text-gray-500 mt-2 font-bold">The network IP address of your kitchen printer.</p>
                    </div>
                    <div>
-                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">KOT merge window (minutes)</label>
-                     <input
-                      type="number"
-                      min={0}
-                      max={60}
-                      value={localRestaurantInfo.kotMergeWindowMinutes ?? 3}
-                      onChange={(e) => setLocalRestaurantInfo({
-                        ...localRestaurantInfo,
-                        kotMergeWindowMinutes: Math.max(0, Math.min(60, Number(e.target.value) || 0)),
-                      })}
-                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-blue-500 outline-none shadow-inner"
-                     />
-                     <p className="text-xs text-gray-500 mt-2 font-bold">
-                       Within this time after printing KOT, the next print includes all items. After that, only newly added items print.
-                     </p>
-                   </div>
-                   <div>
                      <label className="flex items-center gap-3 cursor-pointer font-black text-gray-900 border-2 border-gray-200 p-4 rounded-xl hover:bg-gray-50 transition-colors">
                        <input 
                          type="checkbox" 
