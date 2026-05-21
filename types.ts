@@ -64,9 +64,17 @@ export interface CartItem extends MenuItem {
   selectedMl?: string;
 }
 
+export interface KotPrintState {
+  lastPrintedAt: number;
+  printedItems: Record<string, number>;
+}
+
 export interface TableCart {
   items: CartItem[];
   customerName: string;
+  /** Timestamp (ms) when the first item was added to this table's cart. */
+  itemsAddedAt?: number;
+  kotPrintState?: KotPrintState;
 }
 
 export interface Order {

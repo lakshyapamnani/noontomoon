@@ -26,7 +26,16 @@ import {
   Wallet
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, TableCart } from '../types';
+import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, KotPrintState } from '../types';
+import {
+  normalizeKotPrintState,
+  getKotItemsToPrint,
+  buildKotStateAfterPrint,
+  mergeKotPrintStates,
+  getKotMergeWindowMinutes,
+  toStoredKotPrintState,
+} from '../utils/kotPrint';
+// occupied timer removed
 import TablesGrid from './TablesGrid';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
@@ -172,10 +181,10 @@ const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, onConfirm, on
           </div>
         )}
 
-        {/* ML Size Choice - for drinks with multiple sizes */}
+        {/* Quantity Choice - for drinks with multiple quantity/rate options */}
         {hasMlPrices && (
           <div className="mb-5">
-            <label className="block text-xs font-black text-gray-500 mb-2 uppercase">Choose Size *</label>
+            <label className="block text-xs font-black text-gray-500 mb-2 uppercase">Choose Quantity *</label>
             <div className="grid grid-cols-3 gap-2">
               {mlEntries.map(([size, price]) => (
                 <button
@@ -217,6 +226,8 @@ const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, onConfirm, on
 interface TableCart {
   items: CartItem[];
   customerName: string;
+  itemsAddedAt?: number;
+  kotPrintState?: KotPrintState | ReturnType<typeof toStoredKotPrintState>;
 }
 
 const toCartItemsArray = (value: unknown): CartItem[] => {
@@ -233,12 +244,16 @@ const normalizeTableCart = (value: unknown): TableCart => {
   if (!value || typeof value !== 'object') {
     return { items: [], customerName: '' };
   }
-  const cart = value as { items?: unknown; customerName?: unknown };
+  const cart = value as { items?: unknown; customerName?: unknown; itemsAddedAt?: unknown; kotPrintState?: unknown };
+  const addedAt = Number(cart.itemsAddedAt);
   return {
     items: toCartItemsArray(cart.items),
     customerName: typeof cart.customerName === 'string' ? cart.customerName : '',
+    itemsAddedAt: !Number.isNaN(addedAt) && addedAt > 0 ? addedAt : undefined,
+    kotPrintState: normalizeKotPrintState(cart.kotPrintState) as KotPrintState | undefined,
   };
 };
+
 
 const mergeCartItems = (existing: CartItem[], incoming: CartItem[]): CartItem[] => {
   const merged = [...existing];
@@ -289,6 +304,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   variant = 'desktop',
 }) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(categories[0]?.id || '');
+
+  // occupied timer removed: no periodic update needed
   const [selectedTableId, setSelectedTableId] = useState<string | null>(selectedTableIdProp ?? null);
   const [orderType, setOrderType] = useState<OrderType>('DELIVERY');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
@@ -374,7 +391,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   // Helper to update table carts
   const updateTableCart = (tableId: string, updater: (current: TableCart) => TableCart) => {
     const currentCart = normalizeTableCart(tableCarts[tableId]);
+    console.debug('[BillingScreen] updateTableCart currentCart for', tableId, currentCart);
     const updated = normalizeTableCart(updater(currentCart));
+    console.debug('[BillingScreen] updateTableCart updated for', tableId, updated);
     onUpdateTableCarts({
       ...tableCarts,
       [tableId]: updated
@@ -418,11 +437,30 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const sourceTableId = orderType === 'DINE_IN' && selectedTableId ? selectedTableId : null;
 
     const targetCart = normalizeTableCart(tableCarts[targetTableId]);
+    const targetHadItems = toCartItemsArray(targetCart.items).length > 0;
     const mergedItems = mergeCartItems(toCartItemsArray(targetCart.items), sourceItems);
     const mergedCustomerName = sourceCustomerName || targetCart.customerName;
+    const sourceKotState = sourceTableId
+      ? normalizeTableCart(tableCarts[sourceTableId]).kotPrintState
+      : defaultKotPrintState;
+    const sourceAddedAt = sourceTableId
+      ? normalizeTableCart(tableCarts[sourceTableId]).itemsAddedAt
+      : undefined;
+    const mergedKotState = mergeKotPrintStates(sourceKotState, targetCart.kotPrintState);
+    let itemsAddedAt: number | undefined;
+    if (mergedItems.length > 0) {
+      itemsAddedAt = targetHadItems
+        ? targetCart.itemsAddedAt
+        : (sourceAddedAt ?? Date.now());
+    }
 
     const newTableCarts = { ...tableCarts };
-    newTableCarts[targetTableId] = { items: mergedItems, customerName: mergedCustomerName };
+    newTableCarts[targetTableId] = {
+      items: mergedItems,
+      customerName: mergedCustomerName,
+      itemsAddedAt,
+      kotPrintState: mergedKotState ? toStoredKotPrintState(mergedKotState) as unknown as KotPrintState : undefined,
+    };
 
     if (sourceTableId && sourceTableId !== targetTableId) {
       newTableCarts[sourceTableId] = { items: [], customerName: '' };
@@ -521,6 +559,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const addToCart = (item: MenuItem, vegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD' | null, portionChoice?: 'HALF' | 'FULL' | null, mlChoice?: string | null) => {
+    console.debug('[BillingScreen] addToCart', { itemId: item.id, vegChoice, portionChoice, mlChoice, orderType, selectedTableId });
     // Create unique id for items with veg choice, portions, and ML size
     const choiceKey = vegChoice ? `-${vegChoice}` : '';
     const portionKey = portionChoice ? `-${portionChoice}` : '';
@@ -561,16 +600,19 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     if (orderType === 'DINE_IN' && selectedTableId) {
       const currentItems = toCartItemsArray(tableCarts[selectedTableId]?.items);
       const existing = currentItems.find(i => i.id === cartItemId);
+      const cartWasEmpty = currentItems.length === 0;
       
       if (existing) {
         updateTableCart(selectedTableId, (cart) => ({
           ...cart,
-          items: cart.items.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1 } : i)
+          items: cart.items.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1 } : i),
+          itemsAddedAt: cart.itemsAddedAt ?? undefined,
         }));
       } else {
         updateTableCart(selectedTableId, (cart) => ({
           ...cart,
-          items: [...cart.items, composeItem({ ...item, quantity: 1 } as CartItem)]
+          items: [...cart.items, composeItem({ ...item, quantity: 1 } as CartItem)],
+          itemsAddedAt: cart.itemsAddedAt,
         }));
       }
       
@@ -580,11 +622,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         onUpdateTableStatus(selectedTableId, 'OCCUPIED');
       }
     } else {
+      console.debug('[BillingScreen] addToCart -> defaultCart before set', defaultCart);
       setDefaultCart(prev => {
         const existing = prev.find(i => i.id === cartItemId);
         if (existing) {
+          console.debug('[BillingScreen] addToCart -> increment defaultCart item', cartItemId);
           return prev.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1 } : i);
         }
+        console.debug('[BillingScreen] addToCart -> push new defaultCart item', cartItemId);
         return [...prev, composeItem({ ...item, quantity: 1 } as CartItem)];
       });
     }
@@ -608,7 +653,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       
       updateTableCart(selectedTableId, (cart) => ({
         ...cart,
-        items: updatedItems
+        items: updatedItems,
+        itemsAddedAt: updatedItems.length > 0 ? cart.itemsAddedAt : undefined,
       }));
     } else {
       setDefaultCart(prev => prev.map(item => {
@@ -633,7 +679,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       
       updateTableCart(selectedTableId, (cart) => ({
         ...cart,
-        items: updatedItems
+        items: updatedItems,
+        itemsAddedAt: updatedItems.length > 0 ? cart.itemsAddedAt : undefined,
       }));
     } else {
       setDefaultCart(prev => prev.filter(item => item.id !== id));
@@ -789,7 +836,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               </div>
               ${foodItems.map(it => `
                 <div class="row">
-                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}${it.selectedMl ? ` (${it.selectedMl})` : ''}</span>
                   <span class="qty">${it.quantity}</span>
                   <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
                 </div>
@@ -819,7 +866,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               </div>
               ${drinkItems.map(it => `
                 <div class="row">
-                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}${it.selectedMl ? ` (${it.selectedMl})` : ''}</span>
                   <span class="qty">${it.quantity}</span>
                   <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
                 </div>
@@ -1412,6 +1459,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                                 ? `₹${Math.min(...(Object.values(item.mlPrices!) as number[]))} - ₹${Math.max(...(Object.values(item.mlPrices!) as number[]))}`
                                 : item.vegType === 'BOTH' ? `Veg ₹${item.vegPrice} / Non-Veg ₹${item.nonVegPrice}` : `₹${item.price}`}
                             </div>
+                            {hasMl && (
+                              <div className="text-[10px] text-purple-600 font-bold mt-1">
+                                Qty: {Object.keys(item.mlPrices!).join(' / ')}
+                              </div>
+                            )}
                           </div>
 
                           {itemHasOptions ? (
@@ -1478,7 +1530,15 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   {currentCart.map(item => (
                     <div key={item.id} className="bg-white p-3 rounded-xl shadow-sm flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-bold text-gray-900 truncate">{item.name}</div>
+                        <div className="text-sm font-bold text-gray-900 truncate">
+                          {item.name}
+                          {item.selectedPortion && (
+                            <span className="ml-1 opacity-70">({item.selectedPortion === 'HALF' ? 'Half' : 'Full'})</span>
+                          )}
+                          {item.selectedMl && (
+                            <span className="ml-1 text-[10px] font-black text-purple-600">({item.selectedMl})</span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-gray-500 font-medium">₹{item.price} each</div>
                       </div>
                       <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1 shadow-sm">
@@ -1627,6 +1687,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             const itemCount = getTableItemCount(table.id);
             const isSelected = selectedTableId === table.id;
             const isOccupied = table.status === 'OCCUPIED' || itemCount > 0;
+            const occupiedTimer = null;
             
             return (
               <button
@@ -1635,7 +1696,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   setSelectedTableId(table.id);
                   setOrderType('DINE_IN');
                 }}
-                className={`relative px-4 py-2 rounded-xl font-black text-sm transition-all shrink-0 ${
+                className={`relative flex flex-col items-center px-4 py-2 rounded-xl font-black text-sm transition-all shrink-0 ${
                   isSelected 
                     ? 'bg-[#F57C00] text-white shadow-lg shadow-orange-200' 
                     : isOccupied
@@ -1643,7 +1704,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {table.name}
+                <span>{table.name}</span>
+                {/* occupied timer removed */}
                 {itemCount > 0 && (
                   <span className={`absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center ${
                     isSelected ? 'bg-white text-[#F57C00]' : 'bg-[#F57C00] text-white'
@@ -1760,6 +1822,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 )}
               </div>
               <h3 className="font-bold text-gray-800 text-sm md:text-base mb-1 line-clamp-2 flex-1">{item.name}</h3>
+              {item.mlPrices && Object.keys(item.mlPrices).length > 0 && (
+                <p className="text-[11px] text-purple-600 font-black mb-1">
+                  Qty: {Object.keys(item.mlPrices).join(' / ')}
+                </p>
+              )}
               <div className="mt-3 flex justify-end">
                 <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-[#F57C00] group-hover:text-white transition-all shadow-sm">
                   <Plus size={18} />
