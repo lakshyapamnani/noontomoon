@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
 import { Printer, ShoppingCart } from 'lucide-react';
-import { Table, CartItem, Floor, TableCart } from '../types';
+import { Table, CartItem, Floor } from '../types';
 
-export type TableCartRecord = Record<string, TableCart>;
+export type TableCart = Record<string, { items: CartItem[]; customerName: string }>;
 
 interface TablesGridProps {
   tables: Table[];
   floors?: Floor[];
-  tableCarts: TableCartRecord;
+  tableCarts: TableCart;
   selectedTableId?: string | null;
   onSelectTable: (tableId: string) => void;
   onPrintTable?: (tableId: string) => void;
@@ -23,24 +23,13 @@ const TablesGrid: React.FC<TablesGridProps> = ({
   onPrintTable,
   onCheckoutTable,
 }) => {
-  // timers removed: no live occupied timer displayed
-
   const tableStats = useMemo(() => {
-    const stats: Record<string, { itemCount: number; total: number; itemsAddedAt?: number }> = {};
+    const stats: Record<string, { itemCount: number; total: number }> = {};
     for (const t of tables) {
-      const cart = tableCarts?.[t.id];
-      const itemsRaw = cart?.items;
-      const items = Array.isArray(itemsRaw)
-        ? itemsRaw
-        : itemsRaw && typeof itemsRaw === 'object'
-          ? Object.values(itemsRaw as Record<string, CartItem>)
-          : [];
+      const items = tableCarts?.[t.id]?.items || [];
       const itemCount = items.reduce((sum, it) => sum + (it.quantity || 0), 0);
       const total = items.reduce((sum, it) => sum + (it.price || 0) * (it.quantity || 0), 0);
-      const addedAt = Number(cart?.itemsAddedAt);
-      let itemsAddedAt: number | undefined =
-        !Number.isNaN(addedAt) && addedAt > 0 ? addedAt : undefined;
-      stats[t.id] = { itemCount, total, itemsAddedAt };
+      stats[t.id] = { itemCount, total };
     }
     return stats;
   }, [tables, tableCarts]);
@@ -71,8 +60,7 @@ const TablesGrid: React.FC<TablesGridProps> = ({
   }, [tables, floors]);
 
   const renderCard = (table: Table) => {
-    const { itemCount, total, itemsAddedAt } = tableStats[table.id] || { itemCount: 0, total: 0 };
-    const occupiedTimer = null;
+    const { itemCount, total } = tableStats[table.id] || { itemCount: 0, total: 0 };
     const isOccupied = table.status === 'OCCUPIED' || itemCount > 0;
     const isSelected = selectedTableId === table.id;
     const seats = table.capacity ?? 2;
@@ -95,7 +83,6 @@ const TablesGrid: React.FC<TablesGridProps> = ({
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-lg md:text-xl font-black text-gray-900">{table.name}</div>
-            {/* occupied timer removed */}
             <div className={isOccupied ? 'text-[#F57C00]' : 'text-gray-600'}>
               <span className="text-xs font-black">{seatsLabel}</span>
             </div>

@@ -178,16 +178,7 @@ const App: React.FC = () => {
           ? Object.values(itemsRaw)
           : [];
       const customerName = typeof cart?.customerName === 'string' ? cart.customerName : '';
-      const entry: { items: any[]; customerName: string; itemsAddedAt?: number; kotPrintState?: ReturnType<typeof toStoredKotPrintState> } = { items, customerName };
-      const addedAt = Number(cart?.itemsAddedAt);
-      if (!Number.isNaN(addedAt) && addedAt > 0) {
-        entry.itemsAddedAt = addedAt;
-      }
-      const parsedKot = normalizeKotPrintState(cart?.kotPrintState);
-      if (parsedKot) {
-        entry.kotPrintState = toStoredKotPrintState(parsedKot);
-      }
-      normalized[tableId] = entry;
+      normalized[tableId] = { items, customerName };
     });
 
     return normalized;
