@@ -806,14 +806,26 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTableStatus = async (tableId: string, status: Table['status'], currentOrderId?: string) => {
-    const updatedTables = tables.map(t =>
-      t.id === tableId ? { ...t, status, currentOrderId } : t
-    );
+    const updatedTables = tables.map(t => {
+      if (t.id !== tableId) return t;
+      const updated: Table = { ...t, status, currentOrderId };
+      if (status === 'OCCUPIED' && t.status !== 'OCCUPIED') {
+        updated.occupiedAt = Date.now();
+      } else if (status === 'AVAILABLE') {
+        updated.occupiedAt = undefined;
+      }
+      return updated;
+    });
     setTables(updatedTables);
     localStorage.setItem('drona_tables', JSON.stringify(updatedTables));
 
     try {
-      await update(ref(db, userPath(`tables/${tableId}`)), { status, currentOrderId: currentOrderId || null });
+      const fbUpdate: Record<string, unknown> = { status, currentOrderId: currentOrderId || null };
+      const targetTable = updatedTables.find(t => t.id === tableId);
+      if (targetTable) {
+        fbUpdate.occupiedAt = targetTable.occupiedAt ?? null;
+      }
+      await update(ref(db, userPath(`tables/${tableId}`)), fbUpdate);
     } catch (error) {
       console.error("Firebase Sync Error (Update Table):", error);
     }

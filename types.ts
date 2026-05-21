@@ -16,6 +16,7 @@ export interface Table {
   currentOrderId?: string;
   capacity?: number;
   floorId?: string;
+  occupiedAt?: number;
 }
 
 export interface RestaurantInfo {
