@@ -48,7 +48,7 @@ interface OrdersListProps {
 }
 
 const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = null, onUpdateStatus, onDeleteOrder, restaurantInfo, taxRate, drinkTaxRate = 0, categories = [] }) => {
-  const isAllBillsView = title === "All Bills";
+  const isAllBillsView = title === "All Bills" || title === "Completed Orders" || title === "Cancelled Orders";
   const [activeTab, setActiveTab] = useState<'TODAY' | 'ALL'>('TODAY');
   const [kotCategoryId, setKotCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -368,12 +368,18 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
         if (!categoryMap[catId]) {
           categoryMap[catId] = { name: catName, items: {} };
         }
-        const key = it.name;
+        
+        // Include ml details and portion labels in the aggregated KOT summary display name and key
+        const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
+        const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
+        const displayName = `${it.name}${details ? ` (${details})` : ''}`;
+
+        const key = displayName;
         if (!categoryMap[catId].items[key]) {
-          categoryMap[catId].items[key] = { name: it.name, qty: 0, total: 0 };
+          categoryMap[catId].items[key] = { name: displayName, qty: 0, total: 0 };
         }
         categoryMap[catId].items[key].qty += it.quantity;
-        categoryMap[catId].items[key].total += it.price * it.quantity;
+        categoryMap[catId].items[key].total += (it.price || 0) * it.quantity;
       });
     });
 

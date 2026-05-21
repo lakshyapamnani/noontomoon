@@ -423,4 +423,5 @@ export const INITIAL_RESTAURANT_INFO = {
   printServerUrl: 'http://localhost:3001',
   billPrinterIp: '',
   kotPrinterIp: '192.168.1.5',
+  kotPrintWindowMins: 5,
 };

@@ -29,6 +29,7 @@ export interface RestaurantInfo {
   billPrinterIp?: string;
   kotPrinterIp?: string;
   useUsbForBill?: boolean;
+  kotPrintWindowMins?: number;
 }
 
 export type VegType = 'VEG' | 'NON_VEG' | 'SEAFOOD' | 'BOTH';
@@ -62,6 +63,7 @@ export interface CartItem extends MenuItem {
   selectedVegChoice?: 'VEG' | 'NON_VEG' | 'SEAFOOD';
   selectedPortion?: 'HALF' | 'FULL';
   selectedMl?: string;
+  addedAt?: number;
 }
 
 export interface TableCart {

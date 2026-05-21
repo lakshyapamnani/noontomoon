@@ -702,28 +702,16 @@ const App: React.FC = () => {
   };
 
   const handleStartNewDay = async () => {
-    const sessionOrderIds = orders
-      .filter(o => isOrderInCurrentBusinessDay(o, lastNewDayAt))
-      .map(o => o.id);
     const newSessionStart = new Date().toISOString();
 
     try {
       await set(ref(db, userPath('bill_counter')), 0);
       setBillCounter(0);
 
-      if (sessionOrderIds.length > 0) {
-        const deleteUpdates: Record<string, null> = {};
-        sessionOrderIds.forEach(id => {
-          deleteUpdates[userPath(`orders/${id}`)] = null;
-        });
-        await update(ref(db), deleteUpdates);
-        setOrders(prev => prev.filter(o => !sessionOrderIds.includes(o.id)));
-      }
-
       await update(ref(db, userPath('settings')), { lastNewDayAt: newSessionStart });
       setLastNewDayAt(newSessionStart);
 
-      console.log("New day started: bill counter reset, session orders cleared");
+      console.log("New day started: bill counter reset, lastNewDayAt updated");
     } catch (error) {
       console.error("Firebase Error (Start New Day):", error);
       throw error;
@@ -852,6 +840,10 @@ const App: React.FC = () => {
     };
     if (item.vegPrice !== undefined && item.vegPrice !== null) cleanItem.vegPrice = item.vegPrice;
     if (item.nonVegPrice !== undefined && item.nonVegPrice !== null) cleanItem.nonVegPrice = item.nonVegPrice;
+    if (item.seafoodPrice !== undefined && item.seafoodPrice !== null) cleanItem.seafoodPrice = item.seafoodPrice;
+    if (item.hasPortions !== undefined && item.hasPortions !== null) cleanItem.hasPortions = item.hasPortions;
+    if (item.halfPrice !== undefined && item.halfPrice !== null) cleanItem.halfPrice = item.halfPrice;
+    if (item.quantityStr !== undefined && item.quantityStr !== null) cleanItem.quantityStr = item.quantityStr;
     if (item.image) cleanItem.image = item.image;
     if (item.mlPrices && Object.keys(item.mlPrices).length > 0) cleanItem.mlPrices = item.mlPrices;
 
@@ -1369,6 +1361,7 @@ const App: React.FC = () => {
           <OrdersList
             title="Completed Orders"
             orders={orders.filter(o => o.status === 'COMPLETED')}
+            lastNewDayAt={lastNewDayAt}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
@@ -1381,6 +1374,7 @@ const App: React.FC = () => {
           <OrdersList
             title="Cancelled Orders"
             orders={orders.filter(o => o.status === 'CANCELLED')}
+            lastNewDayAt={lastNewDayAt}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
             restaurantInfo={restaurantInfo}
