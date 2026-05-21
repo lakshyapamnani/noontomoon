@@ -23,19 +23,10 @@ import {
   Utensils,
   Users,
   ArrowLeft,
-  Wallet,
-  Printer
+  Wallet
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, KotPrintState } from '../types';
-import {
-  normalizeKotPrintState,
-  getKotItemsToPrint,
-  buildKotStateAfterPrint,
-  mergeKotPrintStates,
-  getKotMergeWindowMinutes,
-  toStoredKotPrintState,
-} from '../utils/kotPrint';
+import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, TableCart } from '../types';
 import TablesGrid from './TablesGrid';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
@@ -223,10 +214,9 @@ const ItemOptionsPopup: React.FC<ItemOptionsPopupProps> = ({ item, onConfirm, on
   );
 };
 
-interface BillingTableCart {
+interface TableCart {
   items: CartItem[];
   customerName: string;
-  kotPrintState?: KotPrintState | ReturnType<typeof toStoredKotPrintState>;
 }
 
 const toCartItemsArray = (value: unknown): CartItem[] => {
@@ -239,15 +229,14 @@ const toCartItemsArray = (value: unknown): CartItem[] => {
   return [];
 };
 
-const normalizeTableCart = (value: unknown): BillingTableCart => {
+const normalizeTableCart = (value: unknown): TableCart => {
   if (!value || typeof value !== 'object') {
     return { items: [], customerName: '' };
   }
-  const cart = value as { items?: unknown; customerName?: unknown; kotPrintState?: unknown };
+  const cart = value as { items?: unknown; customerName?: unknown };
   return {
     items: toCartItemsArray(cart.items),
     customerName: typeof cart.customerName === 'string' ? cart.customerName : '',
-    kotPrintState: normalizeKotPrintState(cart.kotPrintState) as KotPrintState | undefined,
   };
 };
 
@@ -272,11 +261,11 @@ interface BillingScreenProps {
   restaurantInfo: RestaurantInfo;
   tables: Table[];
   floors?: Floor[];
-  tableCarts: Record<string, BillingTableCart>;
+  tableCarts: Record<string, TableCart>;
   billCounter: number;
   onCreateOrder: (order: Order) => Promise<void>;
   onUpdateTableStatus: (tableId: string, status: Table['status'], currentOrderId?: string) => void;
-  onUpdateTableCarts: (tableCarts: Record<string, BillingTableCart>) => void;
+  onUpdateTableCarts: (tableCarts: Record<string, TableCart>) => void;
   selectedTableId?: string | null;
   onBackToTables?: () => void;
   variant?: 'desktop' | 'mobile';
@@ -383,46 +372,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [defaultCustomerName, setDefaultCustomerName] = useState('');
 
   // Helper to update table carts
-  const [defaultKotPrintState, setDefaultKotPrintState] = useState<KotPrintState | undefined>();
-  const kotPrintStateRef = useRef<Record<string, KotPrintState | undefined>>({});
-
-  const getKotCartKey = () =>
-    orderType === 'DINE_IN' && selectedTableId ? selectedTableId : '__default__';
-
-  const getKotPrintState = (): KotPrintState | undefined => {
-    const key = getKotCartKey();
-    if (kotPrintStateRef.current[key]) {
-      return kotPrintStateRef.current[key];
-    }
-    if (orderType === 'DINE_IN' && selectedTableId) {
-      return normalizeTableCart(tableCarts[selectedTableId]).kotPrintState;
-    }
-    return defaultKotPrintState;
-  };
-
-  const saveKotPrintState = (state: KotPrintState | undefined) => {
-    const key = getKotCartKey();
-    kotPrintStateRef.current[key] = state;
-
-    const stored = state ? toStoredKotPrintState(state) : undefined;
-    if (orderType === 'DINE_IN' && selectedTableId) {
-      updateTableCart(selectedTableId, (cart) => ({
-        ...cart,
-        kotPrintState: stored as unknown as KotPrintState,
-      }));
-    } else {
-      setDefaultKotPrintState(state);
-    }
-  };
-
-  useEffect(() => {
-    Object.entries(tableCarts).forEach(([tableId, cart]) => {
-      const parsed = normalizeTableCart(cart).kotPrintState;
-      if (parsed) kotPrintStateRef.current[tableId] = parsed;
-    });
-  }, [tableCarts]);
-
-  const updateTableCart = (tableId: string, updater: (current: BillingTableCart) => BillingTableCart) => {
+  const updateTableCart = (tableId: string, updater: (current: TableCart) => TableCart) => {
     const currentCart = normalizeTableCart(tableCarts[tableId]);
     const updated = normalizeTableCart(updater(currentCart));
     onUpdateTableCarts({
@@ -470,21 +420,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const targetCart = normalizeTableCart(tableCarts[targetTableId]);
     const mergedItems = mergeCartItems(toCartItemsArray(targetCart.items), sourceItems);
     const mergedCustomerName = sourceCustomerName || targetCart.customerName;
-    const sourceKotState = sourceTableId
-      ? normalizeTableCart(tableCarts[sourceTableId]).kotPrintState
-      : defaultKotPrintState;
-    const mergedKotState = mergeKotPrintStates(sourceKotState, targetCart.kotPrintState);
 
     const newTableCarts = { ...tableCarts };
-    newTableCarts[targetTableId] = {
-      items: mergedItems,
-      customerName: mergedCustomerName,
-      kotPrintState: mergedKotState ? toStoredKotPrintState(mergedKotState) as unknown as KotPrintState : undefined,
-    };
+    newTableCarts[targetTableId] = { items: mergedItems, customerName: mergedCustomerName };
 
     if (sourceTableId && sourceTableId !== targetTableId) {
       newTableCarts[sourceTableId] = { items: [], customerName: '' };
-      delete kotPrintStateRef.current[sourceTableId];
       onUpdateTableStatus(sourceTableId, 'AVAILABLE');
     }
 
@@ -493,7 +434,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     if (!sourceTableId && sourceItems.length > 0) {
       setDefaultCart([]);
       setDefaultCustomerName('');
-      setDefaultKotPrintState(undefined);
     }
 
     setSelectedTableId(targetTableId);
@@ -943,13 +883,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }, 300000); // 5 minutes fallback
   };
 
-  const doIframeKotPrint = (
-    selectedTable: Table | undefined,
-    itemsToPrint: CartItem[],
-    options?: { newItemsOnly?: boolean; kotCheck?: boolean }
-  ) => {
-    const newItemsOnly = options?.newItemsOnly ?? false;
-    const kotCheck = options?.kotCheck ?? false;
+  const doIframeKotPrint = (selectedTable: Table | undefined) => {
     const escapeHtml = (value: string) =>
       value
         .replace(/&/g, '&amp;')
@@ -961,7 +895,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const printedAt = now.toLocaleString();
     const tableName = selectedTable?.name || 'TAKEAWAY';
 
-    const itemRows = itemsToPrint.map((item) => {
+    const itemRows = currentCart.map((item) => {
       const optionTags: string[] = [];
       if (item.selectedPortion) optionTags.push(item.selectedPortion === 'HALF' ? 'HALF' : 'FULL');
       if (item.selectedVegChoice) optionTags.push(item.selectedVegChoice);
@@ -1066,7 +1000,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
         </head>
         <body>
           <div class="center kot-title">K. O. T.</div>
-          ${kotCheck ? '<div class="center" style="font-weight:900;margin:4px 0;">** KOT CHECK **</div>' : newItemsOnly ? '<div class="center" style="font-weight:900;margin:4px 0;">** NEW ITEMS **</div>' : ''}
           <div class="divider"></div>
           <div class="meta">TABLE: ${escapeHtml(tableName)}</div>
           ${customerName ? `<div class="meta">CUST: ${escapeHtml(customerName)}</div>` : ''}
@@ -1112,29 +1045,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       alert("Please add items to the cart first.");
       return;
     }
-
-    const kotState = getKotPrintState();
-    const mergeMinutes = getKotMergeWindowMinutes(restaurantInfo.kotMergeWindowMinutes);
-    const { items: itemsToPrint, mode } = getKotItemsToPrint(currentCart, kotState, mergeMinutes);
-
-    if (itemsToPrint.length === 0) {
-      alert("No new items to print on KOT. Add more items or wait for the merge window to pass and try again.");
-      return;
-    }
-
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    doIframeKotPrint(selectedTable, itemsToPrint, { newItemsOnly: mode === 'new' });
-    saveKotPrintState(buildKotStateAfterPrint(currentCart));
-  };
-
-  const printKOTCheck = async () => {
-    if (currentCart.length === 0) {
-      alert("Please add items to the cart first.");
-      return;
-    }
-    const selectedTable = tables.find(t => t.id === selectedTableId);
-    doIframeKotPrint(selectedTable, currentCart, { kotCheck: true });
-    saveKotPrintState(buildKotStateAfterPrint(currentCart));
+    doIframeKotPrint(selectedTable);
   };
 
   const buildKotPrintLines = (selectedTable: Table | undefined) => {
@@ -1295,7 +1207,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
     // Checkout finalizes the order, clears cart context, and returns to tables.
     if (selectedTableId && (orderType === 'DINE_IN' || (selectedTableId && toCartItemsArray(tableCarts[selectedTableId]?.items).length > 0))) {
-      delete kotPrintStateRef.current[selectedTableId];
       updateTableCart(selectedTableId, () => ({ items: [], customerName: '' }));
       onUpdateTableStatus(selectedTableId, 'AVAILABLE');
       setSelectedTableId(null);
@@ -1307,8 +1218,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     } else {
       setDefaultCart([]);
       setDefaultCustomerName('');
-      delete kotPrintStateRef.current['__default__'];
-      setDefaultKotPrintState(undefined);
       setSelectedTableId(null);
       if (variant === 'mobile') {
         setMobileTab('menu');
@@ -1608,36 +1517,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   </div>
 
                   {currentCart.length > 0 && (
-                    <div className="grid grid-cols-4 gap-1.5 mt-4">
-                      <button
-                        onClick={() => printKOT()}
-                        className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-indigo-600 text-white py-2.5 px-1 rounded-lg font-black transition-all active:scale-95"
-                      >
-                        <ChefHat size={14} />
-                        <span className="text-[8px] uppercase leading-none">KOT</span>
-                      </button>
-                      <button
-                        onClick={() => printKOTCheck()}
-                        className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-green-600 text-white py-2.5 px-1 rounded-lg font-black transition-all active:scale-95"
-                      >
-                        <CheckCircle size={14} />
-                        <span className="text-[8px] uppercase leading-none">Check</span>
-                      </button>
-                      <button
-                        onClick={() => handlePlaceOrder(false, true)}
-                        className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-[#262626] text-white py-2.5 px-1 rounded-lg font-black transition-all active:scale-95"
-                      >
-                        <ShoppingCart size={14} />
-                        <span className="text-[8px] uppercase leading-none">Checkout</span>
-                      </button>
-                      <button
-                        onClick={() => handlePlaceOrder(true, false)}
-                        className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-[#F57C00] text-white py-2.5 px-1 rounded-lg font-black transition-all active:scale-95"
-                      >
-                        <Printer size={14} />
-                        <span className="text-[8px] uppercase leading-none">Bill</span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => printKOT()}
+                      className="w-full mt-4 flex items-center justify-center gap-2 bg-black text-white py-4 rounded-xl font-black transition-all shadow-lg active:scale-95"
+                    >
+                      <ChefHat size={20} /> PRINT KOT
+                    </button>
                   )}
                 </div>
               )}
@@ -2082,34 +1967,27 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             <PaymentTab active={paymentMode === 'OTHER'} onClick={() => setPaymentMode('OTHER')} icon={<Wallet size={16} />} label="Others" />
           </div>
 
-          <div className="grid grid-cols-4 gap-1.5">
-            <button
+          <div className="grid grid-cols-3 gap-2">
+            <button 
               onClick={() => printKOT()}
-              className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-indigo-600 text-white py-2 px-1 rounded-lg font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-sm"
+              className="flex flex-col items-center justify-center gap-1 bg-indigo-600 text-white py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-100"
             >
-              <ChefHat size={14} />
-              <span className="text-[8px] uppercase tracking-tight leading-none">KOT</span>
+              <ChefHat size={18} /> 
+              <span className="text-[10px] uppercase tracking-tighter">KOT</span>
             </button>
-            <button
-              onClick={() => printKOTCheck()}
-              className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-green-600 text-white py-2 px-1 rounded-lg font-black hover:bg-green-700 transition-all active:scale-95 shadow-sm"
-            >
-              <CheckCircle size={14} />
-              <span className="text-[8px] uppercase tracking-tight leading-none text-center">Check</span>
-            </button>
-            <button
+            <button 
               onClick={() => handlePlaceOrder(false, true)}
-              className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-[#262626] text-white py-2 px-1 rounded-lg font-black hover:bg-black transition-all active:scale-95 shadow-sm"
+              className="flex flex-col items-center justify-center gap-1 bg-[#262626] text-white py-3 rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-200"
             >
-              <ShoppingCart size={14} />
-              <span className="text-[8px] uppercase tracking-tight leading-none">Checkout</span>
+              <ShoppingCart size={18} />
+              <span className="text-[10px] uppercase tracking-tighter">Checkout</span>
             </button>
-            <button
+            <button 
               onClick={() => handlePlaceOrder(true, false)}
-              className="min-w-0 flex flex-col items-center justify-center gap-0.5 bg-[#F57C00] text-white py-2 px-1 rounded-lg font-black hover:bg-orange-600 transition-all active:scale-95 shadow-sm"
+              className="flex flex-col items-center justify-center gap-1 bg-[#F57C00] text-white py-3 rounded-2xl font-black hover:bg-orange-600 transition-all active:scale-95 shadow-lg shadow-orange-200"
             >
-              <Printer size={14} />
-              <span className="text-[8px] uppercase tracking-tight leading-none">Bill</span>
+              <CheckCircle size={18} />
+              <span className="text-[10px] uppercase tracking-tighter">Print Bill</span>
             </button>
           </div>
         </div>
