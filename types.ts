@@ -29,8 +29,6 @@ export interface RestaurantInfo {
   billPrinterIp?: string;
   kotPrinterIp?: string;
   useUsbForBill?: boolean;
-  /** Minutes after a KOT print during which re-print includes full cart; after that, only new items. */
-  kotMergeWindowMinutes?: number;
 }
 
 export type VegType = 'VEG' | 'NON_VEG' | 'SEAFOOD' | 'BOTH';

@@ -51,7 +51,6 @@ import TablesGrid from './components/TablesGrid';
 
 // Firebase imports
 import { isOrderInCurrentBusinessDay } from './utils/businessDay';
-import { normalizeKotPrintState, toStoredKotPrintState } from './utils/kotPrint';
 import { db, auth } from './firebase';
 import { ref, onValue, set, push, update, get } from 'firebase/database';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -166,10 +165,10 @@ const App: React.FC = () => {
     );
   };
 
-  const normalizeTableCarts = (value: unknown): Record<string, { items: any[]; customerName: string; kotPrintState?: { lastPrintedAt: number; printedItems: Record<string, number> } }> => {
+  const normalizeTableCarts = (value: unknown): Record<string, { items: any[]; customerName: string }> => {
     if (!value || typeof value !== 'object') return {};
     const raw = value as Record<string, any>;
-    const normalized: Record<string, { items: any[]; customerName: string; kotPrintState?: { lastPrintedAt: number; printedItems: Record<string, number> } }> = {};
+    const normalized: Record<string, { items: any[]; customerName: string }> = {};
 
     Object.entries(raw).forEach(([tableId, cart]) => {
       const itemsRaw = cart?.items;
