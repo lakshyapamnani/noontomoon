@@ -74,6 +74,8 @@ export interface KotPrintState {
 export interface TableCart {
   items: CartItem[];
   customerName: string;
+  /** Timestamp (ms) when the first item was added to this table's cart. */
+  itemsAddedAt?: number;
   kotPrintState?: KotPrintState;
 }
 

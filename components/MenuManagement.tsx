@@ -2,6 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Search, Save, X, Utensils, Tag, Store, Percent, LayoutGrid, RefreshCw, Database, Package } from 'lucide-react';
 import { MenuItem, Category, RestaurantInfo, Table, VegType, Floor } from '../types';
 
+type DrinkQtyRate = {
+  qty: string;
+  rate: string;
+};
+
+const DEFAULT_DRINK_QUANTITIES = ['30', '60', '90', '180'];
+
+const buildDefaultDrinkQtyRates = (): DrinkQtyRate[] =>
+  DEFAULT_DRINK_QUANTITIES.map((qty) => ({ qty, rate: '' }));
+
+const buildDrinkQtyRatesFromItem = (item?: MenuItem | null): DrinkQtyRate[] => {
+  if (item?.mlPrices && Object.keys(item.mlPrices).length > 0) {
+    return Object.entries(item.mlPrices)
+      .sort((a, b) => {
+        const aNum = parseFloat(String(a[0]));
+        const bNum = parseFloat(String(b[0]));
+        if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+        return String(a[0]).localeCompare(String(b[0]));
+      })
+      .map(([qty, rate]) => ({ qty, rate: String(rate) }));
+  }
+
+  if (item) {
+    return [{ qty: item.quantityStr || '', rate: item.price ? String(item.price) : '' }];
+  }
+
+  return buildDefaultDrinkQtyRates();
+};
+
 interface MenuManagementProps {
   categories: Category[];
   menuItems: MenuItem[];
@@ -74,6 +103,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   const [itemVegType, setItemVegType] = useState<VegType>('VEG');
   const [itemCategoryId, setItemCategoryId] = useState('');
   const [itemHasPortions, setItemHasPortions] = useState(false);
+  const [drinkQtyRates, setDrinkQtyRates] = useState<DrinkQtyRate[]>(buildDefaultDrinkQtyRates());
 
   const [localRestaurantInfo, setLocalRestaurantInfo] = useState<RestaurantInfo>(restaurantInfo);
 
@@ -105,6 +135,13 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   const handleOpenCatModal = (cat?: Category) => {
     setEditingCat(cat || null);
     setIsCatModalOpen(true);
+  };
+
+  const handleOpenDrinkItemModal = (item?: MenuItem) => {
+    setEditingDrinkItem(item || null);
+    setItemCategoryId(item?.categoryId || (drinkCategories.length > 0 ? drinkCategories[0].id : ''));
+    setDrinkQtyRates(buildDrinkQtyRatesFromItem(item || null));
+    setIsDrinkItemModalOpen(true);
   };
 
 
@@ -229,7 +266,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           {activeTab === 'DRINKS' && (
             <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1">
               <div className="flex gap-4 mb-4">
-                <button onClick={() => { setEditingDrinkItem(null); setItemCategoryId(drinkCategories.length > 0 ? drinkCategories[0].id : ''); setIsDrinkItemModalOpen(true); }} className="bg-[#F57C00] text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"><Plus size={20} /> Add Drink Item</button>
+                <button onClick={() => handleOpenDrinkItemModal()} className="bg-[#F57C00] text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"><Plus size={20} /> Add Drink Item</button>
                 <button onClick={() => { setEditingDrinkCat(null); setIsDrinkCatModalOpen(true); }} className="bg-white text-[#F57C00] border-2 border-[#F57C00] px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-orange-50 transition-all shadow-sm active:scale-95"><Plus size={20} /> Add Drink Category</button>
               </div>
               
@@ -256,13 +293,23 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-black text-gray-900">{item.name}</h4>
-                          {item.quantityStr && <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>}
+                          {item.mlPrices && Object.keys(item.mlPrices).length > 0 ? (
+                            <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">
+                              {Object.keys(item.mlPrices).join(' / ')}
+                            </span>
+                          ) : (
+                            item.quantityStr && <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>
+                          )}
                           <span className="text-xs text-gray-400 block mt-1">{categories.find(c => c.id === item.categoryId)?.name}</span>
                         </div>
-                        <span className="font-black text-[#F57C00]">₹{item.price}</span>
+                        <span className="font-black text-[#F57C00]">
+                          {item.mlPrices && Object.keys(item.mlPrices).length > 0
+                            ? `₹${Math.min(...Object.values(item.mlPrices))} - ₹${Math.max(...Object.values(item.mlPrices))}`
+                            : `₹${item.price}`}
+                        </span>
                       </div>
                       <div className="flex justify-end gap-1 mt-4">
-                        <button onClick={() => { setEditingDrinkItem(item); setItemCategoryId(item.categoryId); setIsDrinkItemModalOpen(true); }} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
+                        <button onClick={() => handleOpenDrinkItemModal(item)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
                         <button onClick={() => onDeleteMenuItem(item.id)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Trash2 size={16} /></button>
                       </div>
                     </div>
@@ -1075,14 +1122,37 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const name = formData.get('name') as string;
-                const price = parseFloat(formData.get('price') as string);
-                const quantityStr = formData.get('quantityStr') as string;
                 const categoryId = itemCategoryId;
+                const validQtyRates = drinkQtyRates
+                  .map((entry) => ({
+                    qty: entry.qty.trim(),
+                    rate: Number(entry.rate),
+                  }))
+                  .filter((entry) => entry.qty && Number.isFinite(entry.rate) && entry.rate > 0);
                 
                 if (!categoryId) { alert('Please select or create a drink category first.'); return; }
+                if (validQtyRates.length === 0) {
+                  alert('Please add at least one valid quantity and rate for this drink.');
+                  return;
+                }
+
+                const mlPrices = validQtyRates.reduce<Record<string, number>>((acc, entry) => {
+                  acc[entry.qty] = entry.rate;
+                  return acc;
+                }, {});
+                const firstRate = validQtyRates[0].rate;
+                const quantityStr = validQtyRates.length === 1
+                  ? validQtyRates[0].qty
+                  : `${validQtyRates[0].qty}+`; 
                 
                 const drinkData = { 
-                  name, price, quantityStr, categoryId, isVeg: true, vegType: 'VEG' as const
+                  name,
+                  price: firstRate,
+                  quantityStr,
+                  mlPrices,
+                  categoryId,
+                  isVeg: true,
+                  vegType: 'VEG' as const
                 };
 
                 if (editingDrinkItem) onUpdateMenuItem({ ...editingDrinkItem, ...drinkData });
@@ -1096,15 +1166,57 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Drink Name</label>
                 <input name="name" defaultValue={editingDrinkItem?.name} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
               </div>
-              
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Quantity (e.g. 300ml, 1 Pint)</label>
-                <input name="quantityStr" defaultValue={editingDrinkItem?.quantityStr} className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
-              </div>
 
               <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Price (₹)</label>
-                <input name="price" type="number" defaultValue={editingDrinkItem?.price} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-black text-gray-900 uppercase tracking-wider">Drink Quantities & Rates</label>
+                  <button
+                    type="button"
+                    onClick={() => setDrinkQtyRates(prev => [...prev, { qty: '', rate: '' }])}
+                    className="text-xs font-black text-[#F57C00] border border-orange-300 bg-orange-50 px-3 py-1 rounded-lg hover:bg-orange-100"
+                  >
+                    + Add Quantity
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {drinkQtyRates.map((entry, idx) => (
+                    <div key={`${idx}-${entry.qty}`} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                      <input
+                        type="text"
+                        value={entry.qty}
+                        onChange={(e) => {
+                          const next = [...drinkQtyRates];
+                          next[idx] = { ...next[idx], qty: e.target.value };
+                          setDrinkQtyRates(next);
+                        }}
+                        placeholder="Qty (e.g. 30, 60, 90, 180)"
+                        className="w-full p-3 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={entry.rate}
+                        onChange={(e) => {
+                          const next = [...drinkQtyRates];
+                          next[idx] = { ...next[idx], rate: e.target.value };
+                          setDrinkQtyRates(next);
+                        }}
+                        placeholder="Rate (₹)"
+                        className="w-full p-3 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setDrinkQtyRates(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)}
+                        disabled={drinkQtyRates.length === 1}
+                        className="p-2 text-gray-500 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Remove row"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 font-bold mt-2">Default rows are 30, 60, 90, 180. Add more sizes as needed.</p>
               </div>
 
               <div>
