@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Printer, ShoppingCart } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Printer, ShoppingCart, Clock } from 'lucide-react';
 import { Table, CartItem, Floor } from '../types';
 
 export type TableCart = Record<string, { items: CartItem[]; customerName: string }>;
@@ -13,6 +13,41 @@ interface TablesGridProps {
   onPrintTable?: (tableId: string) => void;
   onCheckoutTable?: (tableId: string) => void;
 }
+
+/** Format elapsed ms into MM:SS or H:MM:SS */
+const formatElapsed = (ms: number): string => {
+  if (ms < 0) ms = 0;
+  const totalSecs = Math.floor(ms / 1000);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (hrs > 0) {
+    return `${hrs}:${pad(mins)}:${pad(secs)}`;
+  }
+  return `${pad(mins)}:${pad(secs)}`;
+};
+
+/** Small component that ticks every second to show elapsed time */
+const OccupiedTimer: React.FC<{ occupiedAt: number }> = ({ occupiedAt }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const elapsed = now - occupiedAt;
+
+  return (
+    <div className="flex items-center gap-1 mt-1.5">
+      <Clock size={11} className="text-orange-400 shrink-0" />
+      <span className="text-[11px] font-black text-orange-500 tabular-nums tracking-tight">
+        {formatElapsed(elapsed)}
+      </span>
+    </div>
+  );
+};
 
 const TablesGrid: React.FC<TablesGridProps> = ({
   tables,
@@ -86,10 +121,14 @@ const TablesGrid: React.FC<TablesGridProps> = ({
             <div className={isOccupied ? 'text-[#F57C00]' : 'text-gray-600'}>
               <span className="text-xs font-black">{seatsLabel}</span>
             </div>
+            {/* Occupied Timer */}
+            {isOccupied && table.occupiedAt && (
+              <OccupiedTimer occupiedAt={table.occupiedAt} />
+            )}
           </div>
           {isOccupied && (
             <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#F57C00]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#F57C00] animate-pulse" />
               {itemCount > 0 && (
                 <span className="text-[10px] font-black text-[#F57C00] bg-white/80 border border-orange-200 px-2 py-0.5 rounded-full">
                   {itemCount}
