@@ -66,6 +66,59 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   const drinkCategories = categories.filter(c => c.type === 'DRINK');
   const drinkItems = menuItems.filter(i => drinkCategories.some(c => c.id === i.categoryId));
   
+  const [mlList, setMlList] = useState<{ size: string; price: number }[]>([]);
+
+  const handleOpenDrinkModal = (item?: MenuItem | null) => {
+    if (!item) {
+      setEditingDrinkItem(null);
+      setItemCategoryId(drinkCategories.length > 0 ? drinkCategories[0].id : '');
+      setMlList([
+        { size: '30ml', price: 0 },
+        { size: '60ml', price: 0 },
+        { size: '90ml', price: 0 },
+        { size: '120ml', price: 0 },
+        { size: '750ml', price: 0 },
+      ]);
+    } else {
+      setEditingDrinkItem(item);
+      setItemCategoryId(item.categoryId);
+      if (item.mlPrices && Object.keys(item.mlPrices).length > 0) {
+        const entries = Object.entries(item.mlPrices).map(([size, price]) => ({
+          size,
+          price: Number(price) || 0
+        }));
+        setMlList(entries);
+      } else {
+        setMlList([
+          { size: '30ml', price: item.price || 0 },
+          { size: '60ml', price: 0 },
+          { size: '90ml', price: 0 },
+          { size: '120ml', price: 0 },
+          { size: '750ml', price: 0 },
+        ]);
+      }
+    }
+    setIsDrinkItemModalOpen(true);
+  };
+
+  const updateMlRow = (index: number, field: 'size' | 'price', value: string) => {
+    const newList = [...mlList];
+    if (field === 'size') {
+      newList[index].size = value;
+    } else {
+      newList[index].price = parseFloat(value) || 0;
+    }
+    setMlList(newList);
+  };
+
+  const removeMlRow = (index: number) => {
+    setMlList(mlList.filter((_, i) => i !== index));
+  };
+
+  const addMlRow = () => {
+    setMlList([...mlList, { size: '', price: 0 }]);
+  };
+  
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -229,7 +282,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           {activeTab === 'DRINKS' && (
             <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar flex-1 pb-20 pr-1">
               <div className="flex gap-4 mb-4">
-                <button onClick={() => { setEditingDrinkItem(null); setItemCategoryId(drinkCategories.length > 0 ? drinkCategories[0].id : ''); setIsDrinkItemModalOpen(true); }} className="bg-[#F57C00] text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"><Plus size={20} /> Add Drink Item</button>
+                <button onClick={() => handleOpenDrinkModal(null)} className="bg-[#F57C00] text-white px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95"><Plus size={20} /> Add Drink Item</button>
                 <button onClick={() => { setEditingDrinkCat(null); setIsDrinkCatModalOpen(true); }} className="bg-white text-[#F57C00] border-2 border-[#F57C00] px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-orange-50 transition-all shadow-sm active:scale-95"><Plus size={20} /> Add Drink Category</button>
               </div>
               
@@ -252,17 +305,30 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 <h3 className="text-xl font-black text-gray-900 mt-6 mb-4 border-b-2 pb-2">Drink Items</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {drinkItems.map(item => (
-                    <div key={item.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl group hover:border-[#F57C00] transition-colors shadow-sm">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-black text-gray-900">{item.name}</h4>
-                          {item.quantityStr && <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>}
+                    <div key={item.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl group hover:border-[#F57C00] transition-colors shadow-sm flex flex-col justify-between">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
+                          <h4 className="font-black text-gray-900 truncate" title={item.name}>{item.name}</h4>
+                          {item.mlPrices && Object.keys(item.mlPrices).length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {Object.keys(item.mlPrices).map(size => (
+                                <span key={size} className="text-[10px] text-purple-700 font-black bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">{size}</span>
+                              ))}
+                            </div>
+                          ) : item.quantityStr ? (
+                            <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>
+                          ) : null}
                           <span className="text-xs text-gray-400 block mt-1">{categories.find(c => c.id === item.categoryId)?.name}</span>
                         </div>
-                        <span className="font-black text-[#F57C00]">₹{item.price}</span>
+                        <span className="font-black text-[#F57C00] text-sm whitespace-nowrap">
+                          {item.mlPrices && Object.keys(item.mlPrices).length > 0 
+                            ? `₹${Math.min(...(Object.values(item.mlPrices) as number[]))} - ₹${Math.max(...(Object.values(item.mlPrices) as number[]))}`
+                            : `₹${item.price}`
+                          }
+                        </span>
                       </div>
                       <div className="flex justify-end gap-1 mt-4">
-                        <button onClick={() => { setEditingDrinkItem(item); setItemCategoryId(item.categoryId); setIsDrinkItemModalOpen(true); }} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
+                        <button onClick={() => handleOpenDrinkModal(item)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
                         <button onClick={() => onDeleteMenuItem(item.id)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Trash2 size={16} /></button>
                       </div>
                     </div>
@@ -585,6 +651,18 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-blue-500 outline-none shadow-inner placeholder:text-gray-400" 
                      />
                      <p className="text-xs text-gray-500 mt-2 font-bold">The network IP address of your kitchen printer.</p>
+                   </div>
+                   <div>
+                     <label className="block text-sm font-black text-gray-900 mb-2 uppercase">KOT Print Time Window (Minutes)</label>
+                     <input 
+                      type="number" 
+                      value={localRestaurantInfo.kotPrintWindowMins ?? 5} 
+                      onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, kotPrintWindowMins: parseInt(e.target.value) ?? 5})}
+                      placeholder="e.g., 5"
+                      className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-blue-500 outline-none shadow-inner placeholder:text-gray-400" 
+                      min="0"
+                     />
+                     <p className="text-xs text-gray-500 mt-2 font-bold">Only print items added to the cart within the last X minutes to the kitchen. Default is 5 minutes.</p>
                    </div>
                    <div>
                      <label className="flex items-center gap-3 cursor-pointer font-black text-gray-900 border-2 border-gray-200 p-4 rounded-xl hover:bg-gray-50 transition-colors">
@@ -1058,14 +1136,36 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const name = formData.get('name') as string;
-                const price = parseFloat(formData.get('price') as string);
-                const quantityStr = formData.get('quantityStr') as string;
                 const categoryId = itemCategoryId;
                 
                 if (!categoryId) { alert('Please select or create a drink category first.'); return; }
                 
+                const mlPrices: Record<string, number> = {};
+                mlList.forEach(entry => {
+                  let size = entry.size.trim();
+                  if (size) {
+                    if (/^\d+$/.test(size)) {
+                      size = size + 'ml';
+                    }
+                    mlPrices[size] = Number(entry.price) || 0;
+                  }
+                });
+
+                // Compute base price as the first price or minimum
+                const pricesArray = Object.values(mlPrices);
+                const price = pricesArray.length > 0 ? pricesArray[0] : 0;
+                
+                // Construct quantityStr showing available sizes
+                const quantityStr = Object.keys(mlPrices).join(', ');
+
                 const drinkData = { 
-                  name, price, quantityStr, categoryId, isVeg: true, vegType: 'VEG' as const
+                  name, 
+                  price, 
+                  quantityStr, 
+                  categoryId, 
+                  isVeg: true, 
+                  vegType: 'VEG' as const,
+                  mlPrices
                 };
 
                 if (editingDrinkItem) onUpdateMenuItem({ ...editingDrinkItem, ...drinkData });
@@ -1081,13 +1181,49 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
               </div>
               
               <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Quantity (e.g. 300ml, 1 Pint)</label>
-                <input name="quantityStr" defaultValue={editingDrinkItem?.quantityStr} className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Price (₹)</label>
-                <input name="price" type="number" defaultValue={editingDrinkItem?.price} required className="w-full p-4 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-lg focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner" />
+                <label className="block text-sm font-black text-gray-900 mb-2 uppercase tracking-wider">Sizes & Pricing (ml / portions)</label>
+                <div className="space-y-3 bg-gray-50 p-4 rounded-2xl border-2 border-gray-200 max-h-[250px] overflow-y-auto custom-scrollbar">
+                  {mlList.map((entry, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      <div className="flex-1 min-w-0">
+                        <input 
+                          type="text" 
+                          placeholder="e.g. 30ml" 
+                          value={entry.size} 
+                          onChange={(e) => updateMlRow(index, 'size', e.target.value)}
+                          required
+                          className="w-full p-3 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-sm focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <input 
+                          type="number" 
+                          placeholder="Price (₹)" 
+                          value={entry.price === 0 ? '' : entry.price} 
+                          onChange={(e) => updateMlRow(index, 'price', e.target.value)}
+                          required
+                          className="w-full p-3 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-black text-sm focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner"
+                        />
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => removeMlRow(index)}
+                        className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 hover:text-red-700 transition-colors active:scale-95 flex items-center justify-center border-2 border-transparent shrink-0"
+                        title="Delete size"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  <button 
+                    type="button"
+                    onClick={addMlRow}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 border-2 border-dashed border-gray-300 hover:border-[#F57C00] rounded-xl text-gray-700 hover:text-[#F57C00] font-black text-xs md:text-sm transition-colors active:scale-98"
+                  >
+                    <Plus size={16} /> Add More
+                  </button>
+                </div>
               </div>
 
               <div>

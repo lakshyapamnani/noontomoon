@@ -555,7 +555,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       price: totalItemPrice,
       selectedVegChoice: vegChoice || undefined,
       selectedPortion: portionChoice || undefined,
-      selectedMl: mlChoice || undefined
+      selectedMl: mlChoice || undefined,
+      addedAt: Date.now()
     });
 
     if (orderType === 'DINE_IN' && selectedTableId) {
@@ -565,7 +566,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       if (existing) {
         updateTableCart(selectedTableId, (cart) => ({
           ...cart,
-          items: cart.items.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1 } : i)
+          items: cart.items.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1, addedAt: Date.now() } : i)
         }));
       } else {
         updateTableCart(selectedTableId, (cart) => ({
@@ -583,7 +584,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       setDefaultCart(prev => {
         const existing = prev.find(i => i.id === cartItemId);
         if (existing) {
-          return prev.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1 } : i);
+          return prev.map(i => i.id === cartItemId ? { ...i, quantity: i.quantity + 1, addedAt: Date.now() } : i);
         }
         return [...prev, composeItem({ ...item, quantity: 1 } as CartItem)];
       });
@@ -596,7 +597,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       const updatedItems = currentItems.map(item => {
         if (item.id === id) {
           const newQty = Math.max(0, item.quantity + delta);
-          return { ...item, quantity: newQty };
+          const extraProps = delta > 0 ? { addedAt: Date.now() } : {};
+          return { ...item, quantity: newQty, ...extraProps };
         }
         return item;
       }).filter(item => item.quantity > 0);
@@ -614,7 +616,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       setDefaultCart(prev => prev.map(item => {
         if (item.id === id) {
           const newQty = Math.max(0, item.quantity + delta);
-          return { ...item, quantity: newQty };
+          const extraProps = delta > 0 ? { addedAt: Date.now() } : {};
+          return { ...item, quantity: newQty, ...extraProps };
         }
         return item;
       }).filter(item => item.quantity > 0));
@@ -787,13 +790,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 <span class="qty">Qty</span>
                 <span class="amt">Amt</span>
               </div>
-              ${foodItems.map(it => `
-                <div class="row">
-                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
-                  <span class="qty">${it.quantity}</span>
-                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-                </div>
-              `).join('')}
+              ${foodItems.map(it => {
+                const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
+                const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
+                return `
+                  <div class="row">
+                    <span class="item-name">${it.name}${details ? ` (${details})` : ''}</span>
+                    <span class="qty">${it.quantity}</span>
+                    <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                  </div>
+                `;
+              }).join('')}
               <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
                 <span>FOOD TOTAL:</span>
                 <span>Rs ${foodSub.toFixed(0)}</span>
@@ -817,13 +824,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                 <span class="qty">Qty</span>
                 <span class="amt">Amt</span>
               </div>
-              ${drinkItems.map(it => `
-                <div class="row">
-                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
-                  <span class="qty">${it.quantity}</span>
-                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-                </div>
-              `).join('')}
+              ${drinkItems.map(it => {
+                const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
+                const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
+                return `
+                  <div class="row">
+                    <span class="item-name">${it.name}${details ? ` (${details})` : ''}</span>
+                    <span class="qty">${it.quantity}</span>
+                    <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                  </div>
+                `;
+              }).join('')}
               <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
                 <span>DRINKS TOTAL:</span>
                 <span>Rs ${drinkSub.toFixed(0)}</span>
@@ -883,7 +894,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }, 300000); // 5 minutes fallback
   };
 
-  const doIframeKotPrint = (selectedTable: Table | undefined) => {
+  const doIframeKotPrint = (selectedTable: Table | undefined, itemsToPrint?: CartItem[]) => {
     const escapeHtml = (value: string) =>
       value
         .replace(/&/g, '&amp;')
@@ -895,7 +906,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const printedAt = now.toLocaleString();
     const tableName = selectedTable?.name || 'TAKEAWAY';
 
-    const itemRows = currentCart.map((item) => {
+    const items = itemsToPrint || currentCart;
+    const itemRows = items.map((item) => {
       const optionTags: string[] = [];
       if (item.selectedPortion) optionTags.push(item.selectedPortion === 'HALF' ? 'HALF' : 'FULL');
       if (item.selectedVegChoice) optionTags.push(item.selectedVegChoice);
@@ -1045,11 +1057,33 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       alert("Please add items to the cart first.");
       return;
     }
+    const windowMins = restaurantInfo.kotPrintWindowMins ?? 5;
+    const windowMs = windowMins * 60 * 1000;
+    const now = Date.now();
+    const itemsToPrint = currentCart.filter(item => {
+      if (!item.addedAt) return true; // Default to print if no timestamp
+      return (now - item.addedAt) <= windowMs;
+    });
+
+    if (itemsToPrint.length === 0) {
+      alert(`No new items were added to the cart within the last ${windowMins} minutes to print.`);
+      return;
+    }
+
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    doIframeKotPrint(selectedTable);
+    doIframeKotPrint(selectedTable, itemsToPrint);
   };
 
-  const buildKotPrintLines = (selectedTable: Table | undefined) => {
+  const printWholeKOT = async () => {
+    if (currentCart.length === 0) {
+      alert("Please add items to the cart first.");
+      return;
+    }
+    const selectedTable = tables.find(t => t.id === selectedTableId);
+    doIframeKotPrint(selectedTable, currentCart);
+  };
+
+  const buildKotPrintLines = (selectedTable: Table | undefined, itemsToPrint?: CartItem[]) => {
     const lineWidth = 42;
     const qtyWidth = 4;
     const itemWidth = lineWidth - qtyWidth - 1;
@@ -1085,7 +1119,8 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     };
 
     const itemLines: string[] = [];
-    currentCart.forEach(it => {
+    const items = itemsToPrint || currentCart;
+    items.forEach(it => {
       const baseName = it.name.toUpperCase();
       const lines = wrapText(baseName, itemWidth);
       lines.forEach((line, idx) => {
@@ -1264,6 +1299,66 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             onConfirm={handleItemOptions}
             onClose={() => setOptionsItem(null)}
           />
+        )}
+
+        {/* Open Item Modal */}
+        {openItemModal.isOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className={`p-6 ${openItemModal.type === 'DRINK' ? 'bg-gray-900' : 'bg-orange-600'} text-white`}>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight">Add Open {openItemModal.type === 'DRINK' ? 'Bar' : 'Food'}</h3>
+                    <p className="text-xs font-bold opacity-80 uppercase mt-1 tracking-widest">Manual Item Entry</p>
+                  </div>
+                  <button 
+                    onClick={() => setOpenItemModal({ isOpen: false, type: null })}
+                    className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Item Name</label>
+                  <input 
+                    autoFocus
+                    type="text"
+                    placeholder="e.g. Special Platter"
+                    value={openItemForm.name}
+                    onChange={(e) => setOpenItemForm({...openItemForm, name: e.target.value})}
+                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl px-5 py-4 text-lg font-bold text-gray-900 focus:ring-4 focus:ring-orange-50 focus:border-orange-500 outline-none transition-all placeholder:text-gray-300"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Rate (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-xl font-black text-gray-400">₹</span>
+                    <input 
+                      type="number"
+                      placeholder="0"
+                      value={openItemForm.rate}
+                      onChange={(e) => setOpenItemForm({...openItemForm, rate: e.target.value})}
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl pl-10 pr-5 py-4 text-2xl font-black text-gray-900 focus:ring-4 focus:ring-orange-50 focus:border-orange-500 outline-none transition-all placeholder:text-gray-300"
+                      onKeyDown={(e) => e.key === 'Enter' && handleOpenItemSubmit()}
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleOpenItemSubmit}
+                  className={`w-full py-5 rounded-2xl font-black text-white text-lg shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] ${
+                    openItemModal.type === 'DRINK' ? 'bg-gray-900 hover:bg-black' : 'bg-orange-600 hover:bg-orange-700'
+                  }`}
+                >
+                  ADD TO BILL
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         <div className="bg-white border-b shadow-sm px-4 py-3 shrink-0">
@@ -1517,12 +1612,20 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   </div>
 
                   {currentCart.length > 0 && (
-                    <button
-                      onClick={() => printKOT()}
-                      className="w-full mt-4 flex items-center justify-center gap-2 bg-black text-white py-4 rounded-xl font-black transition-all shadow-lg active:scale-95"
-                    >
-                      <ChefHat size={20} /> PRINT KOT
-                    </button>
+                    <div className="flex gap-2 w-full mt-4">
+                      <button
+                        onClick={() => printKOT()}
+                        className="flex-1 flex items-center justify-center gap-2 bg-black hover:bg-neutral-800 text-white py-4 rounded-xl font-black transition-all shadow-lg active:scale-95"
+                      >
+                        <ChefHat size={20} /> PRINT KOT
+                      </button>
+                      <button
+                        onClick={() => printWholeKOT()}
+                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-black transition-all shadow-lg active:scale-95"
+                      >
+                        <CheckCircle size={20} /> KOT CHECK
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -1967,27 +2070,34 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             <PaymentTab active={paymentMode === 'OTHER'} onClick={() => setPaymentMode('OTHER')} icon={<Wallet size={16} />} label="Others" />
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-1.5">
             <button 
               onClick={() => printKOT()}
               className="flex flex-col items-center justify-center gap-1 bg-indigo-600 text-white py-3 rounded-2xl font-black hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-100"
             >
               <ChefHat size={18} /> 
-              <span className="text-[10px] uppercase tracking-tighter">KOT</span>
+              <span className="text-[9px] uppercase tracking-tighter">KOT</span>
+            </button>
+            <button 
+              onClick={() => printWholeKOT()}
+              className="flex flex-col items-center justify-center gap-1 bg-emerald-600 text-white py-3 rounded-2xl font-black hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100"
+            >
+              <CheckCircle size={18} /> 
+              <span className="text-[9px] uppercase tracking-tighter font-extrabold">KOT Check</span>
             </button>
             <button 
               onClick={() => handlePlaceOrder(false, true)}
               className="flex flex-col items-center justify-center gap-1 bg-[#262626] text-white py-3 rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-lg shadow-gray-200"
             >
               <ShoppingCart size={18} />
-              <span className="text-[10px] uppercase tracking-tighter">Checkout</span>
+              <span className="text-[9px] uppercase tracking-tighter">Checkout</span>
             </button>
             <button 
               onClick={() => handlePlaceOrder(true, false)}
               className="flex flex-col items-center justify-center gap-1 bg-[#F57C00] text-white py-3 rounded-2xl font-black hover:bg-orange-600 transition-all active:scale-95 shadow-lg shadow-orange-200"
             >
               <CheckCircle size={18} />
-              <span className="text-[10px] uppercase tracking-tighter">Print Bill</span>
+              <span className="text-[9px] uppercase tracking-tighter">Print Bill</span>
             </button>
           </div>
         </div>
