@@ -480,6 +480,31 @@ const App: React.FC = () => {
             setOnboardingStep(0);
           }
         }, { onlyOnce: true });
+
+        // One-time startup sync of tables and floors if empty in Firebase
+        const tablesSnap = await get(ref(db, userPath('tables')));
+        if (!tablesSnap.exists()) {
+          const saved = localStorage.getItem('drona_tables');
+          if (saved) {
+            const tableArray = JSON.parse(saved) as Table[];
+            if (tableArray.length > 0) {
+              await set(ref(db, userPath('tables')), buildRecordById(tableArray));
+              console.log('Startup Sync: Tables synced to Firebase');
+            }
+          }
+        }
+
+        const floorsSnap = await get(ref(db, userPath('floors')));
+        if (!floorsSnap.exists()) {
+          const saved = localStorage.getItem('drona_floors');
+          if (saved) {
+            const floorArray = JSON.parse(saved) as Floor[];
+            if (floorArray.length > 0) {
+              await set(ref(db, userPath('floors')), buildRecordById(floorArray));
+              console.log('Startup Sync: Floors synced to Firebase');
+            }
+          }
+        }
       } catch (error) {
         console.error('Error initializing database:', error);
       }
@@ -548,24 +573,21 @@ const App: React.FC = () => {
       if (data) {
         const tableArray = Object.values(data) as Table[];
         const sortedTables = sortTables(tableArray);
-        setTables(sortedTables);
-        localStorage.setItem('drona_tables', JSON.stringify(sortedTables));
+        setTables(prev => {
+          const prevJson = JSON.stringify(prev);
+          const nextJson = JSON.stringify(sortedTables);
+          if (prevJson === nextJson) return prev;
+          localStorage.setItem('drona_tables', nextJson);
+          return sortedTables;
+        });
       } else {
-        const saved = localStorage.getItem('drona_tables');
-        if (saved) {
-          const tableArray = JSON.parse(saved) as Table[];
-          if (tableArray.length > 0) {
-            set(ref(db, userPath('tables')), buildRecordById(tableArray));
-            setTables(tableArray);
-            return;
-          }
-        }
-        setTables([]);
-        localStorage.setItem('drona_tables', JSON.stringify([]));
+        setTables(prev => {
+          if (prev.length === 0) return prev;
+          localStorage.setItem('drona_tables', JSON.stringify([]));
+          return [];
+        });
       }
     });
-
-
 
     const floorsRef = ref(db, userPath('floors'));
     const unsubscribeFloors = onValue(floorsRef, (snapshot) => {
@@ -575,15 +597,6 @@ const App: React.FC = () => {
         setFloors(floorArray);
         localStorage.setItem('drona_floors', JSON.stringify(floorArray));
       } else {
-        const saved = localStorage.getItem('drona_floors');
-        if (saved) {
-          const floorArray = JSON.parse(saved) as Floor[];
-          if (floorArray.length > 0) {
-            set(ref(db, userPath('floors')), buildRecordById(floorArray));
-            setFloors(floorArray);
-            return;
-          }
-        }
         setFloors([]);
         localStorage.setItem('drona_floors', JSON.stringify([]));
       }
@@ -595,20 +608,19 @@ const App: React.FC = () => {
       const data = snapshot.val();
       if (data) {
         const normalized = normalizeTableCarts(data);
-        setTableCarts(normalized);
-        localStorage.setItem('drona_table_carts', JSON.stringify(normalized));
+        setTableCarts(prev => {
+          const prevJson = JSON.stringify(prev);
+          const nextJson = JSON.stringify(normalized);
+          if (prevJson === nextJson) return prev;
+          localStorage.setItem('drona_table_carts', nextJson);
+          return normalized;
+        });
       } else {
-        const saved = localStorage.getItem('drona_table_carts');
-        if (saved) {
-          const carts = normalizeTableCarts(JSON.parse(saved));
-          if (Object.keys(carts).length > 0) {
-            set(ref(db, userPath('table_carts')), carts);
-            setTableCarts(carts);
-            return;
-          }
-        }
-        setTableCarts({});
-        localStorage.setItem('drona_table_carts', JSON.stringify({}));
+        setTableCarts(prev => {
+          if (Object.keys(prev).length === 0) return prev;
+          localStorage.setItem('drona_table_carts', JSON.stringify({}));
+          return {};
+        });
       }
     });
 
@@ -980,16 +992,29 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateTableCarts = async (newTableCarts: Record<string, { items: any[]; customerName: string }>) => {
-    const normalized = normalizeTableCarts(newTableCarts);
-    const cleanTableCarts = sanitizeForFirebase(normalized);
+  const handleUpdateSingleTableCart = async (tableId: string, cart: { items: any[]; customerName: string }) => {
+    const items = Array.isArray(cart.items) ? cart.items : [];
+    const customerName = typeof cart.customerName === 'string' ? cart.customerName : '';
+    const hasContent = items.length > 0 || customerName.trim() !== '';
+    const cleanCart = hasContent ? sanitizeForFirebase({ items, customerName }) : null;
 
-    setTableCarts(cleanTableCarts);
-    localStorage.setItem('drona_table_carts', JSON.stringify(cleanTableCarts));
+    // Update local state with functional updater (always uses latest state)
+    setTableCarts(prev => {
+      const next = { ...prev };
+      if (cleanCart) {
+        next[tableId] = cleanCart;
+      } else {
+        delete next[tableId];
+      }
+      localStorage.setItem('drona_table_carts', JSON.stringify(next));
+      return next;
+    });
+
+    // Write only this specific table's cart to Firebase (not the entire object)
     try {
-      await set(ref(db, userPath('table_carts')), cleanTableCarts);
+      await set(ref(db, userPath(`table_carts/${tableId}`)), cleanCart);
     } catch (error) {
-      console.error("Firebase Sync Error (Table Carts):", error);
+      console.error("Firebase Sync Error (Single Table Cart):", error);
     }
   };
 
@@ -1332,10 +1357,8 @@ const App: React.FC = () => {
               };
 
               handleCreateOrder(newOrder);
-              // Clear table cart and reset status
-              const newCarts = { ...tableCarts };
-              newCarts[tableId] = { items: [], customerName: '' };
-              handleUpdateTableCarts(newCarts);
+              // Clear only this table's cart and reset status (per-table write)
+              handleUpdateSingleTableCart(tableId, { items: [], customerName: '' });
               handleUpdateTableStatus(tableId, 'AVAILABLE');
             }}
           />
@@ -1353,7 +1376,7 @@ const App: React.FC = () => {
 
             onCreateOrder={handleCreateOrder}
             onUpdateTableStatus={handleUpdateTableStatus}
-            onUpdateTableCarts={handleUpdateTableCarts}
+            onUpdateSingleTableCart={handleUpdateSingleTableCart}
             billCounter={billCounter}
             variant="desktop"
             selectedTableId={selectedTableId}
@@ -1447,7 +1470,7 @@ const App: React.FC = () => {
           />
         );
       default:
-        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
+        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateSingleTableCart={handleUpdateSingleTableCart} />;
     }
   };
 
@@ -1476,7 +1499,7 @@ const App: React.FC = () => {
 
         onCreateOrder={handleCreateOrder}
         onUpdateTableStatus={handleUpdateTableStatus}
-        onUpdateTableCarts={handleUpdateTableCarts}
+        onUpdateSingleTableCart={handleUpdateSingleTableCart}
         billCounter={billCounter}
         variant="mobile"
       />

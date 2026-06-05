@@ -265,7 +265,7 @@ interface BillingScreenProps {
   billCounter: number;
   onCreateOrder: (order: Order) => Promise<void>;
   onUpdateTableStatus: (tableId: string, status: Table['status'], currentOrderId?: string) => void;
-  onUpdateTableCarts: (tableCarts: Record<string, TableCart>) => void;
+  onUpdateSingleTableCart: (tableId: string, cart: { items: any[]; customerName: string }) => void;
   selectedTableId?: string | null;
   onBackToTables?: () => void;
   variant?: 'desktop' | 'mobile';
@@ -283,7 +283,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   billCounter,
   onCreateOrder,
   onUpdateTableStatus,
-  onUpdateTableCarts,
+  onUpdateSingleTableCart,
   selectedTableId: selectedTableIdProp = null,
   onBackToTables,
   variant = 'desktop',
@@ -371,14 +371,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [defaultCart, setDefaultCart] = useState<CartItem[]>([]);
   const [defaultCustomerName, setDefaultCustomerName] = useState('');
 
-  // Helper to update table carts
+  // Helper to update table carts - writes only the specific table's cart
   const updateTableCart = (tableId: string, updater: (current: TableCart) => TableCart) => {
     const currentCart = normalizeTableCart(tableCarts[tableId]);
     const updated = normalizeTableCart(updater(currentCart));
-    onUpdateTableCarts({
-      ...tableCarts,
-      [tableId]: updated
-    });
+    onUpdateSingleTableCart(tableId, updated);
   };
 
   const currentCart = useMemo(() => {
@@ -421,15 +418,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const mergedItems = mergeCartItems(toCartItemsArray(targetCart.items), sourceItems);
     const mergedCustomerName = sourceCustomerName || targetCart.customerName;
 
-    const newTableCarts = { ...tableCarts };
-    newTableCarts[targetTableId] = { items: mergedItems, customerName: mergedCustomerName };
+    // Write per-table instead of the whole object
+    onUpdateSingleTableCart(targetTableId, { items: mergedItems, customerName: mergedCustomerName });
 
     if (sourceTableId && sourceTableId !== targetTableId) {
-      newTableCarts[sourceTableId] = { items: [], customerName: '' };
+      onUpdateSingleTableCart(sourceTableId, { items: [], customerName: '' });
       onUpdateTableStatus(sourceTableId, 'AVAILABLE');
     }
-
-    onUpdateTableCarts(newTableCarts);
 
     if (!sourceTableId && sourceItems.length > 0) {
       setDefaultCart([]);
@@ -1058,21 +1053,41 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       alert("Please add items to the cart first.");
       return;
     }
-    const windowMins = restaurantInfo.kotPrintWindowMins ?? 5;
-    const windowMs = windowMins * 60 * 1000;
-    const now = Date.now();
-    const itemsToPrint = currentCart.filter(item => {
-      if (!item.addedAt) return true; // Default to print if no timestamp
-      return (now - item.addedAt) <= windowMs;
-    });
+
+    const itemsToPrint = currentCart.map(item => {
+      const diff = item.quantity - (item.printedQty || 0);
+      if (diff > 0) {
+        return {
+          ...item,
+          quantity: diff
+        };
+      }
+      return null;
+    }).filter((item): item is CartItem => item !== null);
 
     if (itemsToPrint.length === 0) {
-      alert(`No new items were added to the cart within the last ${windowMins} minutes to print.`);
+      alert("No new items to print.");
       return;
     }
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
     doIframeKotPrint(selectedTable, itemsToPrint);
+
+    // Update printedQty to match quantity for all items in cart
+    if (orderType === 'DINE_IN' && selectedTableId) {
+      updateTableCart(selectedTableId, (cart) => ({
+        ...cart,
+        items: cart.items.map(item => ({
+          ...item,
+          printedQty: item.quantity
+        }))
+      }));
+    } else {
+      setDefaultCart(prev => prev.map(item => ({
+        ...item,
+        printedQty: item.quantity
+      })));
+    }
   };
 
   const printWholeKOT = async () => {
@@ -1082,6 +1097,22 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
     doIframeKotPrint(selectedTable, currentCart);
+
+    // Also update printedQty so subsequent printKOT doesn't double print
+    if (orderType === 'DINE_IN' && selectedTableId) {
+      updateTableCart(selectedTableId, (cart) => ({
+        ...cart,
+        items: cart.items.map(item => ({
+          ...item,
+          printedQty: item.quantity
+        }))
+      }));
+    } else {
+      setDefaultCart(prev => prev.map(item => ({
+        ...item,
+        printedQty: item.quantity
+      })));
+    }
   };
 
   const buildKotPrintLines = (selectedTable: Table | undefined, itemsToPrint?: CartItem[]) => {
