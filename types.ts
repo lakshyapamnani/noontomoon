@@ -65,6 +65,7 @@ export interface CartItem extends MenuItem {
   selectedPortion?: 'HALF' | 'FULL';
   selectedMl?: string;
   addedAt?: number;
+  printedQty?: number;
 }
 
 export interface TableCart {

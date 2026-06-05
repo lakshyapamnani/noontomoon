@@ -265,7 +265,7 @@ interface BillingScreenProps {
   billCounter: number;
   onCreateOrder: (order: Order) => Promise<void>;
   onUpdateTableStatus: (tableId: string, status: Table['status'], currentOrderId?: string) => void;
-  onUpdateTableCarts: (tableCarts: Record<string, TableCart>) => void;
+  onUpdateSingleTableCart: (tableId: string, cart: { items: any[]; customerName: string }) => void;
   selectedTableId?: string | null;
   onBackToTables?: () => void;
   variant?: 'desktop' | 'mobile';
@@ -283,7 +283,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   billCounter,
   onCreateOrder,
   onUpdateTableStatus,
-  onUpdateTableCarts,
+  onUpdateSingleTableCart,
   selectedTableId: selectedTableIdProp = null,
   onBackToTables,
   variant = 'desktop',
@@ -371,14 +371,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [defaultCart, setDefaultCart] = useState<CartItem[]>([]);
   const [defaultCustomerName, setDefaultCustomerName] = useState('');
 
-  // Helper to update table carts
+  // Helper to update table carts - writes only the specific table's cart
   const updateTableCart = (tableId: string, updater: (current: TableCart) => TableCart) => {
     const currentCart = normalizeTableCart(tableCarts[tableId]);
     const updated = normalizeTableCart(updater(currentCart));
-    onUpdateTableCarts({
-      ...tableCarts,
-      [tableId]: updated
-    });
+    onUpdateSingleTableCart(tableId, updated);
   };
 
   const currentCart = useMemo(() => {
@@ -421,15 +418,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     const mergedItems = mergeCartItems(toCartItemsArray(targetCart.items), sourceItems);
     const mergedCustomerName = sourceCustomerName || targetCart.customerName;
 
-    const newTableCarts = { ...tableCarts };
-    newTableCarts[targetTableId] = { items: mergedItems, customerName: mergedCustomerName };
+    // Write per-table instead of the whole object
+    onUpdateSingleTableCart(targetTableId, { items: mergedItems, customerName: mergedCustomerName });
 
     if (sourceTableId && sourceTableId !== targetTableId) {
-      newTableCarts[sourceTableId] = { items: [], customerName: '' };
+      onUpdateSingleTableCart(sourceTableId, { items: [], customerName: '' });
       onUpdateTableStatus(sourceTableId, 'AVAILABLE');
     }
-
-    onUpdateTableCarts(newTableCarts);
 
     if (!sourceTableId && sourceItems.length > 0) {
       setDefaultCart([]);
@@ -741,7 +736,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
               max-width: 76mm;
               margin: 0 auto;
               padding: 3mm;
-              font-size: 14px;
+              font-size: 11px;
               color: #000 !important;
               line-height: 1.4;
               font-weight: 900;
@@ -751,13 +746,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             .center { text-align: center; }
             .bold { font-weight: 900; }
             .line { border-bottom: 2px dashed #000; margin: 6px 0; }
-            .header-name { font-size: 18px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
+            .header-name { font-size: 14px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
             .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 900; }
             .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 900; }
             .qty { width: 24px; text-align: center; font-weight: 900; flex-shrink: 0; }
             .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 900; }
-            .total-section { font-size: 16px; font-weight: 900; margin-top: 4px; }
-            .footer { font-size: 12px; margin-top: 8px; font-weight: 900; }
+            .tax-row { font-family: Arial, sans-serif; font-weight: normal; font-size: 9px; }
+            .total-section { font-size: 13px; font-weight: 900; margin-top: 4px; }
+            .footer { font-size: 9px; margin-top: 8px; font-weight: 900; }
           </style>
         </head>
         <body>
@@ -845,9 +841,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
 
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
-          ${orderGst > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
-          ${orderVat > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
-          <div class="row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
+          ${orderGst > 0 ? `<div class="row tax-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
+          ${orderVat > 0 ? `<div class="row tax-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
+          <div class="row tax-row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
           ${order.discountAmount && order.discountAmount > 0 ? `
             <div class="row" style="color: #000;">
               <span>Discount (${order.discountPercent}%):</span>
@@ -1057,21 +1053,41 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       alert("Please add items to the cart first.");
       return;
     }
-    const windowMins = restaurantInfo.kotPrintWindowMins ?? 5;
-    const windowMs = windowMins * 60 * 1000;
-    const now = Date.now();
-    const itemsToPrint = currentCart.filter(item => {
-      if (!item.addedAt) return true; // Default to print if no timestamp
-      return (now - item.addedAt) <= windowMs;
-    });
+
+    const itemsToPrint = currentCart.map(item => {
+      const diff = item.quantity - (item.printedQty || 0);
+      if (diff > 0) {
+        return {
+          ...item,
+          quantity: diff
+        };
+      }
+      return null;
+    }).filter((item): item is CartItem => item !== null);
 
     if (itemsToPrint.length === 0) {
-      alert(`No new items were added to the cart within the last ${windowMins} minutes to print.`);
+      alert("No new items to print.");
       return;
     }
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
     doIframeKotPrint(selectedTable, itemsToPrint);
+
+    // Update printedQty to match quantity for all items in cart
+    if (orderType === 'DINE_IN' && selectedTableId) {
+      updateTableCart(selectedTableId, (cart) => ({
+        ...cart,
+        items: cart.items.map(item => ({
+          ...item,
+          printedQty: item.quantity
+        }))
+      }));
+    } else {
+      setDefaultCart(prev => prev.map(item => ({
+        ...item,
+        printedQty: item.quantity
+      })));
+    }
   };
 
   const printWholeKOT = async () => {
@@ -1081,6 +1097,22 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
     doIframeKotPrint(selectedTable, currentCart);
+
+    // Also update printedQty so subsequent printKOT doesn't double print
+    if (orderType === 'DINE_IN' && selectedTableId) {
+      updateTableCart(selectedTableId, (cart) => ({
+        ...cart,
+        items: cart.items.map(item => ({
+          ...item,
+          printedQty: item.quantity
+        }))
+      }));
+    } else {
+      setDefaultCart(prev => prev.map(item => ({
+        ...item,
+        printedQty: item.quantity
+      })));
+    }
   };
 
   const buildKotPrintLines = (selectedTable: Table | undefined, itemsToPrint?: CartItem[]) => {
@@ -1612,19 +1644,35 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   </div>
 
                   {currentCart.length > 0 && (
-                    <div className="flex gap-2 w-full mt-4">
-                      <button
-                        onClick={() => printKOT()}
-                        className="flex-1 flex items-center justify-center gap-2 bg-black hover:bg-neutral-800 text-white py-4 rounded-xl font-black transition-all shadow-lg active:scale-95"
-                      >
-                        <ChefHat size={20} /> PRINT KOT
-                      </button>
-                      <button
-                        onClick={() => printWholeKOT()}
-                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-black transition-all shadow-lg active:scale-95"
-                      >
-                        <CheckCircle size={20} /> KOT CHECK
-                      </button>
+                    <div className="space-y-2.5 w-full mt-4">
+                      <div className="flex gap-2 w-full">
+                        <button
+                          onClick={() => printKOT()}
+                          className="flex-1 flex items-center justify-center gap-2 bg-[#4f46e5] hover:bg-indigo-700 text-white py-3.5 rounded-xl font-black transition-all shadow-lg active:scale-95 text-xs"
+                        >
+                          <ChefHat size={16} /> PRINT KOT
+                        </button>
+                        <button
+                          onClick={() => printWholeKOT()}
+                          className="flex-1 flex items-center justify-center gap-2 bg-[#059669] hover:bg-emerald-700 text-white py-3.5 rounded-xl font-black transition-all shadow-lg active:scale-95 text-xs"
+                        >
+                          <CheckCircle size={16} /> KOT CHECK
+                        </button>
+                      </div>
+                      <div className="flex gap-2 w-full">
+                        <button
+                          onClick={() => handlePlaceOrder(false, true)}
+                          className="flex-1 flex items-center justify-center gap-2 bg-[#262626] hover:bg-black text-white py-3.5 rounded-xl font-black transition-all shadow-lg active:scale-95 text-xs"
+                        >
+                          <ShoppingCart size={16} /> CHECKOUT
+                        </button>
+                        <button
+                          onClick={() => handlePlaceOrder(true, false)}
+                          className="flex-1 flex items-center justify-center gap-2 bg-[#F57C00] hover:bg-orange-600 text-white py-3.5 rounded-xl font-black transition-all shadow-lg active:scale-95 text-xs"
+                        >
+                          <CheckCircle size={16} /> PRINT BILL
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

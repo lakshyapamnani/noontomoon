@@ -178,7 +178,9 @@ const App: React.FC = () => {
           ? Object.values(itemsRaw)
           : [];
       const customerName = typeof cart?.customerName === 'string' ? cart.customerName : '';
-      normalized[tableId] = { items, customerName };
+      if (items.length > 0 || customerName.trim() !== '') {
+        normalized[tableId] = { items, customerName };
+      }
     });
 
     return normalized;
@@ -318,15 +320,42 @@ const App: React.FC = () => {
   // Helper to get shared Firebase path (auth removed)
   const userPath = (path: string) => `users/public/${path}`;
 
-  const syncOpenCategories = async () => {
+  const loadAndSyncMenuAndCategories = async () => {
     try {
       const categoriesRef = ref(db, userPath('categories'));
       const menuRef = ref(db, userPath('menu_items'));
 
+      // 1. Fetch categories
       const catSnap = await get(categoriesRef);
-      const categoriesData = catSnap.val() || {};
-      const catArray = Object.values(categoriesData) as Category[];
+      let catArray: Category[] = [];
+      if (catSnap.exists()) {
+        catArray = Object.values(catSnap.val()) as Category[];
+      } else {
+        const saved = localStorage.getItem('drona_categories');
+        if (saved) {
+          catArray = JSON.parse(saved) as Category[];
+          if (catArray.length > 0) {
+            await set(ref(db, userPath('categories')), buildRecordById(catArray));
+          }
+        }
+      }
 
+      // 2. Fetch menu items
+      const menuSnap = await get(menuRef);
+      let menuArray: MenuItem[] = [];
+      if (menuSnap.exists()) {
+        menuArray = Object.values(menuSnap.val()) as MenuItem[];
+      } else {
+        const saved = localStorage.getItem('drona_menu_items');
+        if (saved) {
+          menuArray = JSON.parse(saved) as MenuItem[];
+          if (menuArray.length > 0) {
+            await set(ref(db, userPath('menu_items')), buildRecordById(menuArray));
+          }
+        }
+      }
+
+      // 3. Ensure Open Food and Open Bar exist in categories and menu items
       const openFoodExists = catArray.some(c => c.id === 'cat_open_food' || c.name === 'Open Food');
       const openBarExists = catArray.some(c => c.id === 'cat_open_bar' || c.name === 'Open Bar');
 
@@ -335,20 +364,20 @@ const App: React.FC = () => {
       let finalOpenBarId = 'cat_open_bar';
 
       if (!openFoodExists) {
-        updates[userPath('categories/cat_open_food')] = { id: 'cat_open_food', name: 'Open Food', type: 'FOOD', taxType: 'GST' };
+        const newCat = { id: 'cat_open_food', name: 'Open Food', type: 'FOOD' as const, taxType: 'GST' as const };
+        updates[userPath('categories/cat_open_food')] = newCat;
+        catArray.push(newCat);
       } else {
         finalOpenFoodId = catArray.find(c => c.id === 'cat_open_food' || c.name === 'Open Food')?.id || 'cat_open_food';
       }
 
       if (!openBarExists) {
-        updates[userPath('categories/cat_open_bar')] = { id: 'cat_open_bar', name: 'Open Bar', type: 'DRINK', taxType: 'VAT' };
+        const newCat = { id: 'cat_open_bar', name: 'Open Bar', type: 'DRINK' as const, taxType: 'VAT' as const };
+        updates[userPath('categories/cat_open_bar')] = newCat;
+        catArray.push(newCat);
       } else {
         finalOpenBarId = catArray.find(c => c.id === 'cat_open_bar' || c.name === 'Open Bar')?.id || 'cat_open_bar';
       }
-
-      const menuSnap = await get(menuRef);
-      const menuData = menuSnap.val() || {};
-      const menuArray = Object.values(menuData) as MenuItem[];
 
       const itemsToSync = [
         { id: 'manual-open-food', name: 'Open Food', price: 0, categoryId: finalOpenFoodId },
@@ -359,16 +388,18 @@ const App: React.FC = () => {
 
       itemsToSync.forEach(item => {
         if (!menuArray.some(m => m.id === item.id || (m.name === item.name && m.categoryId === item.categoryId))) {
-          updates[userPath(`menu_items/${item.id}`)] = {
+          const newItem = {
             ...item,
             isVeg: true,
-            vegType: 'VEG',
+            vegType: 'VEG' as const,
             nonVegPrice: 0,
             vegPrice: 0,
             mlPrices: {},
             hasPortions: false,
             halfPrice: 0
           };
+          updates[userPath(`menu_items/${item.id}`)] = newItem;
+          menuArray.push(newItem);
         }
       });
 
@@ -376,8 +407,18 @@ const App: React.FC = () => {
         await update(ref(db), updates);
         console.log("Database Sync: Added missing Open categories/items");
       }
+
+      // 4. Update local state and local storage
+      setCategories(catArray);
+      setMenuItems(menuArray);
+      localStorage.setItem('drona_categories', JSON.stringify(catArray));
+      localStorage.setItem('drona_menu_items', JSON.stringify(menuArray));
     } catch (err) {
       console.error("Database Sync Error:", err);
+      const savedCats = localStorage.getItem('drona_categories');
+      const savedItems = localStorage.getItem('drona_menu_items');
+      if (savedCats) setCategories(JSON.parse(savedCats));
+      if (savedItems) setMenuItems(JSON.parse(savedItems));
     }
   };
 
@@ -439,65 +480,42 @@ const App: React.FC = () => {
             setOnboardingStep(0);
           }
         }, { onlyOnce: true });
+
+        // One-time startup sync of tables and floors if empty in Firebase
+        const tablesSnap = await get(ref(db, userPath('tables')));
+        if (!tablesSnap.exists()) {
+          const saved = localStorage.getItem('drona_tables');
+          if (saved) {
+            const tableArray = JSON.parse(saved) as Table[];
+            if (tableArray.length > 0) {
+              await set(ref(db, userPath('tables')), buildRecordById(tableArray));
+              console.log('Startup Sync: Tables synced to Firebase');
+            }
+          }
+        }
+
+        const floorsSnap = await get(ref(db, userPath('floors')));
+        if (!floorsSnap.exists()) {
+          const saved = localStorage.getItem('drona_floors');
+          if (saved) {
+            const floorArray = JSON.parse(saved) as Floor[];
+            if (floorArray.length > 0) {
+              await set(ref(db, userPath('floors')), buildRecordById(floorArray));
+              console.log('Startup Sync: Floors synced to Firebase');
+            }
+          }
+        }
       } catch (error) {
         console.error('Error initializing database:', error);
       }
     };
 
     initializeDatabase();
-    syncOpenCategories();
+    loadAndSyncMenuAndCategories();
   }, []);
 
   // Firebase Real-time Listeners
   useEffect(() => {
-
-    // Categories Sync
-    const categoriesRef = ref(db, userPath('categories'));
-    const unsubscribeCats = onValue(categoriesRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const catArray = Object.values(data) as Category[];
-        setCategories(catArray);
-        localStorage.setItem('drona_categories', JSON.stringify(catArray));
-      } else {
-        const saved = localStorage.getItem('drona_categories');
-        if (saved) {
-          const catArray = JSON.parse(saved) as Category[];
-          if (catArray.length > 0) {
-            set(ref(db, userPath('categories')), buildRecordById(catArray));
-            setCategories(catArray);
-            return;
-          }
-        }
-        setCategories([]);
-        localStorage.setItem('drona_categories', JSON.stringify([]));
-      }
-    });
-
-    // Menu Items Sync
-    const menuRef = ref(db, userPath('menu_items'));
-    const unsubscribeMenu = onValue(menuRef, (snapshot) => {
-      const data = snapshot.val();
-      console.log("App.tsx - Firebase menu_items listener triggered, data:", data);
-      if (data) {
-        const itemArray = Object.values(data) as MenuItem[];
-        console.log("App.tsx - Setting menuItems state with", itemArray.length, "items");
-        setMenuItems(itemArray);
-        localStorage.setItem('drona_menu_items', JSON.stringify(itemArray));
-      } else {
-        const saved = localStorage.getItem('drona_menu_items');
-        if (saved) {
-          const itemArray = JSON.parse(saved) as MenuItem[];
-          if (itemArray.length > 0) {
-            set(ref(db, userPath('menu_items')), buildRecordById(itemArray));
-            setMenuItems(itemArray);
-            return;
-          }
-        }
-        setMenuItems([]);
-        localStorage.setItem('drona_menu_items', JSON.stringify([]));
-      }
-    });
 
     // Orders Sync - Firebase is the single source of truth
     const ordersRef = ref(db, userPath('orders'));
@@ -555,24 +573,21 @@ const App: React.FC = () => {
       if (data) {
         const tableArray = Object.values(data) as Table[];
         const sortedTables = sortTables(tableArray);
-        setTables(sortedTables);
-        localStorage.setItem('drona_tables', JSON.stringify(sortedTables));
+        setTables(prev => {
+          const prevJson = JSON.stringify(prev);
+          const nextJson = JSON.stringify(sortedTables);
+          if (prevJson === nextJson) return prev;
+          localStorage.setItem('drona_tables', nextJson);
+          return sortedTables;
+        });
       } else {
-        const saved = localStorage.getItem('drona_tables');
-        if (saved) {
-          const tableArray = JSON.parse(saved) as Table[];
-          if (tableArray.length > 0) {
-            set(ref(db, userPath('tables')), buildRecordById(tableArray));
-            setTables(tableArray);
-            return;
-          }
-        }
-        setTables([]);
-        localStorage.setItem('drona_tables', JSON.stringify([]));
+        setTables(prev => {
+          if (prev.length === 0) return prev;
+          localStorage.setItem('drona_tables', JSON.stringify([]));
+          return [];
+        });
       }
     });
-
-
 
     const floorsRef = ref(db, userPath('floors'));
     const unsubscribeFloors = onValue(floorsRef, (snapshot) => {
@@ -582,15 +597,6 @@ const App: React.FC = () => {
         setFloors(floorArray);
         localStorage.setItem('drona_floors', JSON.stringify(floorArray));
       } else {
-        const saved = localStorage.getItem('drona_floors');
-        if (saved) {
-          const floorArray = JSON.parse(saved) as Floor[];
-          if (floorArray.length > 0) {
-            set(ref(db, userPath('floors')), buildRecordById(floorArray));
-            setFloors(floorArray);
-            return;
-          }
-        }
         setFloors([]);
         localStorage.setItem('drona_floors', JSON.stringify([]));
       }
@@ -602,44 +608,32 @@ const App: React.FC = () => {
       const data = snapshot.val();
       if (data) {
         const normalized = normalizeTableCarts(data);
-        setTableCarts(normalized);
-        localStorage.setItem('drona_table_carts', JSON.stringify(normalized));
-
-        // Auto-repair malformed cart shapes in RTDB to keep all clients in sync.
-        if (JSON.stringify(data) !== JSON.stringify(normalized)) {
-          set(ref(db, userPath('table_carts')), sanitizeForFirebase(normalized)).catch((error) => {
-            console.error('Firebase Sync Error (Repair Table Carts):', error);
-          });
-        }
+        setTableCarts(prev => {
+          const prevJson = JSON.stringify(prev);
+          const nextJson = JSON.stringify(normalized);
+          if (prevJson === nextJson) return prev;
+          localStorage.setItem('drona_table_carts', nextJson);
+          return normalized;
+        });
       } else {
-        const saved = localStorage.getItem('drona_table_carts');
-        if (saved) {
-          const carts = normalizeTableCarts(JSON.parse(saved));
-          if (Object.keys(carts).length > 0) {
-            set(ref(db, userPath('table_carts')), carts);
-            setTableCarts(carts);
-            return;
-          }
-        }
-        setTableCarts({});
-        localStorage.setItem('drona_table_carts', JSON.stringify({}));
+        setTableCarts(prev => {
+          if (Object.keys(prev).length === 0) return prev;
+          localStorage.setItem('drona_table_carts', JSON.stringify({}));
+          return {};
+        });
       }
     });
 
     return () => {
-      unsubscribeCats();
-      unsubscribeMenu();
       unsubscribeOrders();
       unsubscribeSettings();
       unsubscribeTables();
-
       unsubscribeFloors();
       unsubscribeTableCarts();
       unsubscribeBillCounter();
     };
   }, []);
 
-  // Action Handlers - Firebase is the single source of truth for orders
   const handleCreateOrder = async (order: Order) => {
     console.log("Creating order:", order);
 
@@ -661,14 +655,19 @@ const App: React.FC = () => {
     const cleanOrder = JSON.parse(JSON.stringify(order));
 
     try {
-      // Save order and update counter atomically
-      await set(ref(db, userPath(`orders/${order.id}`)), cleanOrder);
-      await set(ref(db, userPath('bill_counter')), newCounter);
+      // Save order and update counter in Firebase asynchronously (non-blocking)
+      set(ref(db, userPath(`orders/${order.id}`)), cleanOrder).catch((error) => {
+        console.error("Firebase Error (Save Order):", error);
+      });
+      set(ref(db, userPath('bill_counter')), newCounter).catch((error) => {
+        console.error("Firebase Error (Update Bill Counter):", error);
+      });
+
+      // Update local state instantly so checkout proceeds
       setBillCounter(newCounter);
-      console.log("Order saved to Firebase successfully:", order.id, "Bill:", order.billNo);
+      console.log("Order submitted to Firebase sync queue:", order.id, "Bill:", order.billNo);
     } catch (error) {
-      console.error("Firebase Error (Create Order):", error);
-      alert("Failed to save order. Please check your internet connection.");
+      console.error("Error creating order:", error);
     }
   };
 
@@ -863,6 +862,11 @@ const App: React.FC = () => {
     try {
       await set(ref(db, userPath(`menu_items/${newId}`)), cleanItem);
       console.log("App.tsx - Menu item saved successfully to Firebase");
+      setMenuItems(prev => {
+        const next = [...prev, cleanItem as unknown as MenuItem];
+        localStorage.setItem('drona_menu_items', JSON.stringify(next));
+        return next;
+      });
     } catch (error) {
       console.error("Firebase Sync Error (Add Item):", error);
       alert("Failed to save menu item: " + (error instanceof Error ? error.message : String(error)));
@@ -882,6 +886,11 @@ const App: React.FC = () => {
     try {
       await set(ref(db, userPath(`menu_items/${updatedItem.id}`)), cleanItem);
       console.log("App.tsx - Menu item updated successfully");
+      setMenuItems(prev => {
+        const next = prev.map(item => item.id === updatedItem.id ? (cleanItem as unknown as MenuItem) : item);
+        localStorage.setItem('drona_menu_items', JSON.stringify(next));
+        return next;
+      });
     } catch (error) {
       console.error("Firebase Sync Error (Update Item):", error);
       alert("Failed to update menu item: " + error);
@@ -891,6 +900,11 @@ const App: React.FC = () => {
   const handleDeleteMenuItem = async (id: string) => {
     try {
       await set(ref(db, userPath(`menu_items/${id}`)), null);
+      setMenuItems(prev => {
+        const next = prev.filter(item => item.id !== id);
+        localStorage.setItem('drona_menu_items', JSON.stringify(next));
+        return next;
+      });
     } catch (error) {
       console.error("Firebase Sync Error (Delete Item):", error);
     }
@@ -901,6 +915,11 @@ const App: React.FC = () => {
     const newCat = { id: newId, name, type: type || 'FOOD', taxType: taxType || (type === 'DRINK' ? 'VAT' : 'GST') };
     try {
       await set(ref(db, userPath(`categories/${newId}`)), newCat);
+      setCategories(prev => {
+        const next = [...prev, newCat];
+        localStorage.setItem('drona_categories', JSON.stringify(next));
+        return next;
+      });
     } catch (error) {
       console.error("Firebase Sync Error (Add Category):", error);
     }
@@ -909,6 +928,11 @@ const App: React.FC = () => {
   const handleUpdateCategory = async (updatedCat: Category) => {
     try {
       await set(ref(db, userPath(`categories/${updatedCat.id}`)), updatedCat);
+      setCategories(prev => {
+        const next = prev.map(cat => cat.id === updatedCat.id ? updatedCat : cat);
+        localStorage.setItem('drona_categories', JSON.stringify(next));
+        return next;
+      });
     } catch (error) {
       console.error("Firebase Sync Error (Update Category):", error);
     }
@@ -922,7 +946,16 @@ const App: React.FC = () => {
       for (const item of itemsToDelete) {
         await set(ref(db, userPath(`menu_items/${item.id}`)), null);
       }
-
+      setCategories(prev => {
+        const next = prev.filter(c => c.id !== id);
+        localStorage.setItem('drona_categories', JSON.stringify(next));
+        return next;
+      });
+      setMenuItems(prev => {
+        const next = prev.filter(item => item.categoryId !== id);
+        localStorage.setItem('drona_menu_items', JSON.stringify(next));
+        return next;
+      });
     } catch (error) {
       console.error("Firebase Sync Error (Delete Category):", error);
     }
@@ -959,16 +992,29 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateTableCarts = async (newTableCarts: Record<string, { items: any[]; customerName: string }>) => {
-    const normalized = normalizeTableCarts(newTableCarts);
-    const cleanTableCarts = sanitizeForFirebase(normalized);
+  const handleUpdateSingleTableCart = async (tableId: string, cart: { items: any[]; customerName: string }) => {
+    const items = Array.isArray(cart.items) ? cart.items : [];
+    const customerName = typeof cart.customerName === 'string' ? cart.customerName : '';
+    const hasContent = items.length > 0 || customerName.trim() !== '';
+    const cleanCart = hasContent ? sanitizeForFirebase({ items, customerName }) : null;
 
-    setTableCarts(cleanTableCarts);
-    localStorage.setItem('drona_table_carts', JSON.stringify(cleanTableCarts));
+    // Update local state with functional updater (always uses latest state)
+    setTableCarts(prev => {
+      const next = { ...prev };
+      if (cleanCart) {
+        next[tableId] = cleanCart;
+      } else {
+        delete next[tableId];
+      }
+      localStorage.setItem('drona_table_carts', JSON.stringify(next));
+      return next;
+    });
+
+    // Write only this specific table's cart to Firebase (not the entire object)
     try {
-      await set(ref(db, userPath('table_carts')), cleanTableCarts);
+      await set(ref(db, userPath(`table_carts/${tableId}`)), cleanCart);
     } catch (error) {
-      console.error("Firebase Sync Error (Table Carts):", error);
+      console.error("Firebase Sync Error (Single Table Cart):", error);
     }
   };
 
@@ -1104,7 +1150,7 @@ const App: React.FC = () => {
               max-width: 76mm;
               margin: 0 auto;
               padding: 3mm;
-              font-size: 14px;
+              font-size: 11px;
               color: #000 !important;
               line-height: 1.4;
               font-weight: 900;
@@ -1114,13 +1160,14 @@ const App: React.FC = () => {
             .center { text-align: center; }
             .bold { font-weight: 900; }
             .line { border-bottom: 2px dashed #000; margin: 6px 0; }
-            .header-name { font-size: 18px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
+            .header-name { font-size: 14px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
             .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 900; }
             .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 900; }
             .qty { width: 24px; text-align: center; font-weight: 900; flex-shrink: 0; }
             .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 900; }
-            .total-section { font-size: 16px; font-weight: 900; margin-top: 4px; }
-            .footer { font-size: 12px; margin-top: 8px; font-weight: 900; }
+            .tax-row { font-family: Arial, sans-serif; font-weight: normal; font-size: 9px; }
+            .total-section { font-size: 13px; font-weight: 900; margin-top: 4px; }
+            .footer { font-size: 9px; margin-top: 8px; font-weight: 900; }
           </style>
         </head>
         <body>
@@ -1204,9 +1251,9 @@ const App: React.FC = () => {
 
           <div class="line"></div>
           <div class="row"><span>Subtotal:</span><span>Rs ${subtotal.toFixed(0)}</span></div>
-          ${gstAmount > 0 ? `<div class="row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${gstAmount.toFixed(0)}</span></div>` : ''}
-          ${vatAmount > 0 ? `<div class="row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${vatAmount.toFixed(0)}</span></div>` : ''}
-          <div class="row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
+          ${gstAmount > 0 ? `<div class="row tax-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${gstAmount.toFixed(0)}</span></div>` : ''}
+          ${vatAmount > 0 ? `<div class="row tax-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${vatAmount.toFixed(0)}</span></div>` : ''}
+          <div class="row tax-row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
           ${discountAmount > 0 ? `
             <div class="row">
               <span>Discount (${discountPercent}%):</span>
@@ -1310,10 +1357,8 @@ const App: React.FC = () => {
               };
 
               handleCreateOrder(newOrder);
-              // Clear table cart and reset status
-              const newCarts = { ...tableCarts };
-              newCarts[tableId] = { items: [], customerName: '' };
-              handleUpdateTableCarts(newCarts);
+              // Clear only this table's cart and reset status (per-table write)
+              handleUpdateSingleTableCart(tableId, { items: [], customerName: '' });
               handleUpdateTableStatus(tableId, 'AVAILABLE');
             }}
           />
@@ -1331,7 +1376,7 @@ const App: React.FC = () => {
 
             onCreateOrder={handleCreateOrder}
             onUpdateTableStatus={handleUpdateTableStatus}
-            onUpdateTableCarts={handleUpdateTableCarts}
+            onUpdateSingleTableCart={handleUpdateSingleTableCart}
             billCounter={billCounter}
             variant="desktop"
             selectedTableId={selectedTableId}
@@ -1425,7 +1470,7 @@ const App: React.FC = () => {
           />
         );
       default:
-        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateTableCarts={handleUpdateTableCarts} />;
+        return <BillingScreen categories={categories} menuItems={menuItems} taxRate={taxRate} drinkTaxRate={drinkTaxRate} restaurantInfo={restaurantInfo} tables={tables} floors={floors} tableCarts={tableCarts} onCreateOrder={handleCreateOrder} onUpdateTableStatus={handleUpdateTableStatus} onUpdateSingleTableCart={handleUpdateSingleTableCart} />;
     }
   };
 
@@ -1454,7 +1499,7 @@ const App: React.FC = () => {
 
         onCreateOrder={handleCreateOrder}
         onUpdateTableStatus={handleUpdateTableStatus}
-        onUpdateTableCarts={handleUpdateTableCarts}
+        onUpdateSingleTableCart={handleUpdateSingleTableCart}
         billCounter={billCounter}
         variant="mobile"
       />
