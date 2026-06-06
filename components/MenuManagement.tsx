@@ -55,6 +55,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'ITEMS' | 'CATEGORIES' | 'DRINKS' | 'TABLES' | 'TAXES' | 'RESTAURANT' | 'DATABASE'>('ITEMS');
   const [searchTerm, setSearchTerm] = useState('');
+  const [drinkSearchTerm, setDrinkSearchTerm] = useState('');
   const [newTableName, setNewTableName] = useState('');
   const [newTableFloorId, setNewTableFloorId] = useState('');
   const [newFloorName, setNewFloorName] = useState('');
@@ -65,6 +66,9 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
   const [editingDrinkCat, setEditingDrinkCat] = useState<Category | null>(null);
   const drinkCategories = categories.filter(c => c.type === 'DRINK');
   const drinkItems = menuItems.filter(i => drinkCategories.some(c => c.id === i.categoryId));
+  const filteredDrinkItems = drinkItems.filter(item =>
+    item.name.toLowerCase().includes(drinkSearchTerm.toLowerCase())
+  );
   
   const [mlList, setMlList] = useState<{ size: string; price: number }[]>([]);
 
@@ -76,7 +80,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
         { size: '30ml', price: 0 },
         { size: '60ml', price: 0 },
         { size: '90ml', price: 0 },
-        { size: '120ml', price: 0 },
+        { size: '180ml', price: 0 },
         { size: '750ml', price: 0 },
       ]);
     } else {
@@ -93,7 +97,7 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
           { size: '30ml', price: item.price || 0 },
           { size: '60ml', price: 0 },
           { size: '90ml', price: 0 },
-          { size: '120ml', price: 0 },
+          { size: '180ml', price: 0 },
           { size: '750ml', price: 0 },
         ]);
       }
@@ -302,37 +306,55 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
               </div>
 
               <div>
-                <h3 className="text-xl font-black text-gray-900 mt-6 mb-4 border-b-2 pb-2">Drink Items</h3>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mt-6 mb-4 border-b-2 pb-2">
+                  <h3 className="text-xl font-black text-gray-900">Drink Items</h3>
+                  <div className="relative w-full md:w-80">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-900" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="Search drinks..." 
+                      value={drinkSearchTerm}
+                      onChange={(e) => setDrinkSearchTerm(e.target.value)}
+                      className="w-full bg-white border-2 border-gray-300 rounded-xl py-2 pl-12 pr-4 text-sm text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-sm placeholder:text-gray-400"
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {drinkItems.map(item => (
-                    <div key={item.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl group hover:border-[#F57C00] transition-colors shadow-sm flex flex-col justify-between">
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="min-w-0">
-                          <h4 className="font-black text-gray-900 truncate" title={item.name}>{item.name}</h4>
-                          {item.mlPrices && Object.keys(item.mlPrices).length > 0 ? (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {Object.keys(item.mlPrices).map(size => (
-                                <span key={size} className="text-[10px] text-purple-700 font-black bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">{size}</span>
-                              ))}
-                            </div>
-                          ) : item.quantityStr ? (
-                            <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>
-                          ) : null}
-                          <span className="text-xs text-gray-400 block mt-1">{categories.find(c => c.id === item.categoryId)?.name}</span>
-                        </div>
-                        <span className="font-black text-[#F57C00] text-sm whitespace-nowrap">
-                          {item.mlPrices && Object.keys(item.mlPrices).length > 0 
-                            ? `₹${Math.min(...(Object.values(item.mlPrices) as number[]))} - ₹${Math.max(...(Object.values(item.mlPrices) as number[]))}`
-                            : `₹${item.price}`
-                          }
-                        </span>
-                      </div>
-                      <div className="flex justify-end gap-1 mt-4">
-                        <button onClick={() => handleOpenDrinkModal(item)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
-                        <button onClick={() => onDeleteMenuItem(item.id)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Trash2 size={16} /></button>
-                      </div>
+                  {filteredDrinkItems.length === 0 ? (
+                    <div className="col-span-full text-center py-8 text-gray-500 font-bold">
+                      No drink items found matching "{drinkSearchTerm}"
                     </div>
-                  ))}
+                  ) : (
+                    filteredDrinkItems.map(item => (
+                      <div key={item.id} className="p-4 border-2 border-gray-200 bg-white rounded-xl group hover:border-[#F57C00] transition-colors shadow-sm flex flex-col justify-between">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="min-w-0">
+                            <h4 className="font-black text-gray-900 truncate" title={item.name}>{item.name}</h4>
+                            {item.mlPrices && Object.keys(item.mlPrices).length > 0 ? (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {Object.keys(item.mlPrices).map(size => (
+                                  <span key={size} className="text-[10px] text-purple-700 font-black bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">{size}</span>
+                                ))}
+                              </div>
+                            ) : item.quantityStr ? (
+                              <span className="text-xs text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded-sm mt-1 inline-block">{item.quantityStr}</span>
+                            ) : null}
+                            <span className="text-xs text-gray-400 block mt-1">{categories.find(c => c.id === item.categoryId)?.name}</span>
+                          </div>
+                          <span className="font-black text-[#F57C00] text-sm whitespace-nowrap">
+                            {item.mlPrices && Object.keys(item.mlPrices).length > 0 
+                              ? `₹${Math.min(...(Object.values(item.mlPrices) as number[]))} - ₹${Math.max(...(Object.values(item.mlPrices) as number[]))}`
+                              : `₹${item.price}`
+                            }
+                          </span>
+                        </div>
+                        <div className="flex justify-end gap-1 mt-4">
+                          <button onClick={() => handleOpenDrinkModal(item)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Edit2 size={16} /></button>
+                          <button onClick={() => onDeleteMenuItem(item.id)} className="p-2 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-200"><Trash2 size={16} /></button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
