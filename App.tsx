@@ -51,6 +51,7 @@ import TablesGrid from './components/TablesGrid';
 
 // Firebase imports
 import { isOrderInCurrentBusinessDay } from './utils/businessDay';
+import { calculateOrderTax, calculateOrderTotals } from './utils/tax';
 import { db, auth } from './firebase';
 import { ref, onValue, set, push, update, get } from 'firebase/database';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -1099,31 +1100,18 @@ const App: React.FC = () => {
       return;
     }
     const items = cart.items;
-    const subtotal = items.reduce((sum, it) => sum + (it.price || 0) * (it.quantity || 0), 0);
     const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
     const customerName = cart.customerName || 'Guest';
     const discountPercent = 0; // Default for table previews unless we add a UI for it later
-    // Calculate accurate GST and VAT (on full subtotals)
-    const taxInfo = items.reduce((acc, it) => {
-      const cat = categories.find(c => String(c.id) === String(it.categoryId));
-      const taxType = cat?.taxType || (cat?.type === 'DRINK' ? 'VAT' : 'GST');
-      const itemSubtotal = (it.price || 0) * (it.quantity || 0);
-      
-      if (taxType === 'VAT') {
-        acc.vat += itemSubtotal * drinkTaxRate;
-      } else {
-        acc.gst += itemSubtotal * taxRate;
-      }
-      return acc;
-    }, { gst: 0, vat: 0 });
-
-    const gstAmount = taxInfo.gst;
-    const vatAmount = taxInfo.vat;
-    const taxAmount = gstAmount + vatAmount;
-
-    const totalBeforeDiscount = subtotal + taxAmount;
-    const discountAmount = totalBeforeDiscount * (discountPercent / 100);
-    const total = totalBeforeDiscount - discountAmount;
+    
+    // Calculate accurate GST, VAT and Totals using unified helper
+    const totals = calculateOrderTotals(items, categories, taxRate, drinkTaxRate, 'PERCENT', discountPercent);
+    const subtotal = totals.subtotal;
+    const gstAmount = totals.gst;
+    const vatAmount = totals.vat;
+    const taxAmount = totals.tax;
+    const discountAmount = totals.discountAmount;
+    const total = totals.total;
 
     // iframe print
     const iframe = document.createElement('iframe');
@@ -1323,17 +1311,10 @@ const App: React.FC = () => {
               const tableName = tables.find(t => t.id === tableId)?.name || 'Table';
               const customerName = cart.customerName || 'Guest';
 
-              // Compute subtotals (food vs drink for GST/VAT split)
-              const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
-              const isDrinkCat = (catId: string) => {
-                const cat = categories.find(c => c.id === catId);
-                return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
-              };
-              const foodSub = items.reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
-              const drinkSub = items.reduce((s, i) => s + (isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
-              const subtotal = foodSub + drinkSub;
-              const tax = (foodSub * taxRate) + (drinkSub * drinkTaxRate);
-              const total = subtotal + tax;
+              const checkoutTotals = calculateOrderTotals(items, categories, taxRate, drinkTaxRate, 'PERCENT', 0);
+              const subtotal = checkoutTotals.subtotal;
+              const tax = checkoutTotals.tax;
+              const total = checkoutTotals.total;
 
               const d = new Date();
               const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
