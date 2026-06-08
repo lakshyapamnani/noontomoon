@@ -28,6 +28,7 @@ import {
 import QRCode from 'qrcode';
 import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, TableCart } from '../types';
 import TablesGrid from './TablesGrid';
+import { calculateOrderTax, calculateOrderTotals } from '../utils/tax';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
 
@@ -638,67 +639,21 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }
   };
 
-  const foodSubtotal = currentCart.reduce((acc, item) => {
-    const category = categories.find(c => c.id === item.categoryId);
-    const isDrink = category?.type === 'DRINK';
-    return !isDrink ? acc + (item.price * item.quantity) : acc;
-  }, 0);
-
-  const drinkSubtotal = currentCart.reduce((acc, item) => {
-    const category = categories.find(c => c.id === item.categoryId);
-    const isDrink = category?.type === 'DRINK';
-    return isDrink ? acc + (item.price * item.quantity) : acc;
-  }, 0);
-
-  const subtotal = foodSubtotal + drinkSubtotal;
-  
-  // New tax calculation based on taxType
-  const taxInfo = currentCart.reduce((acc, item) => {
-    const category = categories.find(c => c.id === item.categoryId);
-    const taxType = category?.taxType || (category?.type === 'DRINK' ? 'VAT' : 'GST');
-    const itemSubtotal = item.price * item.quantity;
-    
-    if (taxType === 'VAT') {
-      acc.vat += itemSubtotal * drinkTaxRate;
-    } else if (taxType === 'GST') {
-      acc.gst += itemSubtotal * taxRate;
-    }
-    // MRP has no added tax
-    return acc;
-  }, { gst: 0, vat: 0 });
-
-  // Tax is computed on full subtotals (before discount)
-  const gst = taxInfo.gst;
-  const vat = taxInfo.vat;
-  const tax = gst + vat;
-  const totalBeforeDiscount = subtotal + tax;
-
-  // Discount applied after tax
-  let discountAmount = 0;
-  if (discountType === 'PERCENT') {
-    discountAmount = totalBeforeDiscount * (discountValue / 100);
-  } else {
-    discountAmount = Math.min(totalBeforeDiscount, discountValue);
-  }
-
-  const total = totalBeforeDiscount - discountAmount;
+  const totals = calculateOrderTotals(currentCart, categories, taxRate, drinkTaxRate, discountType, discountValue);
+  const subtotal = totals.subtotal;
+  const gst = totals.gst;
+  const vat = totals.vat;
+  const tax = totals.tax;
+  const discountAmount = totals.discountAmount;
+  const total = totals.total;
 
   const printReceipt = async (order: Order) => {
-    // Compute GST/VAT for this order using category tax types
-    const orderTaxInfo = order.items.reduce((acc, it) => {
-      const category = categories.find(c => c.id === it.categoryId);
-      const taxType = category?.taxType || (category?.type === 'DRINK' ? 'VAT' : 'GST');
-      const itemSubtotal = it.price * it.quantity;
-      
-      if (taxType === 'VAT') {
-        acc.vat += itemSubtotal * drinkTaxRate;
-      } else if (taxType === 'GST') {
-        acc.gst += itemSubtotal * taxRate;
-      }
-      return acc;
-    }, { gst: 0, vat: 0 });
+    // Compute GST/VAT for this order using category tax types via shared utility and round them
+    const orderTaxInfo = calculateOrderTax(order.items, categories, taxRate, drinkTaxRate);
+    const roundedGst = Math.round(orderTaxInfo.gst);
+    const roundedVat = Math.round(orderTaxInfo.vat);
 
-    doIframeReceiptPrint(order, orderTaxInfo.gst, orderTaxInfo.vat);
+    doIframeReceiptPrint(order, roundedGst, roundedVat);
   };
 
   const doIframeReceiptPrint = (order: Order, orderGst: number, orderVat: number) => {
@@ -1209,32 +1164,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       return;
     }
 
-    const checkoutFoodSubtotal = checkoutItems.reduce((acc, item) => {
-      const isDrink = isDrinkCategory(item.categoryId);
-      return !isDrink ? acc + (item.price * item.quantity) : acc;
-    }, 0);
-
-    const checkoutDrinkSubtotal = checkoutItems.reduce((acc, item) => {
-      const isDrink = isDrinkCategory(item.categoryId);
-      return isDrink ? acc + (item.price * item.quantity) : acc;
-    }, 0);
-
-    const checkoutSubtotal = checkoutFoodSubtotal + checkoutDrinkSubtotal;
-
-    // Taxes are computed on full subtotals (before discount)
-    const checkoutFoodTax = checkoutFoodSubtotal * taxRate;
-    const checkoutDrinkTax = checkoutDrinkSubtotal * drinkTaxRate;
-    const checkoutTax = checkoutFoodTax + checkoutDrinkTax;
-    const checkoutTotalBeforeDiscount = checkoutSubtotal + checkoutTax;
-
-    // Discount applied after tax
-    let checkoutDiscountAmount = 0;
-    if (discountType === 'PERCENT') {
-      checkoutDiscountAmount = checkoutTotalBeforeDiscount * (discountValue / 100);
-    } else {
-      checkoutDiscountAmount = Math.min(checkoutTotalBeforeDiscount, discountValue);
-    }
-    const checkoutTotal = checkoutTotalBeforeDiscount - checkoutDiscountAmount;
+    const checkoutTotals = calculateOrderTotals(
+      checkoutItems,
+      categories,
+      taxRate,
+      drinkTaxRate,
+      discountType,
+      discountValue
+    );
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const d = new Date();
@@ -1249,11 +1186,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       date: dateStr,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       items: [...checkoutItems],
-      subtotal: checkoutSubtotal,
+      subtotal: checkoutTotals.subtotal,
       discountPercent: discountType === 'PERCENT' ? discountValue : 0,
-      discountAmount: checkoutDiscountAmount,
-      tax: checkoutTax,
-      total: checkoutTotal,
+      discountAmount: checkoutTotals.discountAmount,
+      tax: checkoutTotals.tax,
+      total: checkoutTotals.total,
       paymentMode,
       orderType: effectiveOrderType,
       staffName: 'Admin',
@@ -2077,11 +2014,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   <span>₹{subtotal.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-400 font-medium">
-                  <span>GST (Food ${(taxRate * 100).toFixed(0)}%)</span>
+                  <span>GST (${(taxRate * 100).toFixed(0)}%)</span>
                   <span>₹{gst.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-400 font-medium">
-                  <span>VAT (Drinks ${(drinkTaxRate * 100).toFixed(0)}%)</span>
+                  <span>VAT (${(drinkTaxRate * 100).toFixed(0)}%)</span>
                   <span>₹{vat.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-400 font-medium">

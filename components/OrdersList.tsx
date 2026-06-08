@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Order, OrderStatus, RestaurantInfo, CartItem, Category, PaymentMode } from '../types';
 import { isOrderInCurrentBusinessDay } from '../utils/businessDay';
+import { calculateOrderTax } from '../utils/tax';
 
 const formatItemDisplay = (it: CartItem) => {
   return `${it.name} x ${it.quantity}`;
@@ -121,16 +122,10 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
   }, [displayedOrders]);
 
   const printReceipt = async (order: Order) => {
-    // Compute GST/VAT from order items
-    const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
-    const isDrinkCat = (catId: string) => {
-      const cat = categories.find(c => c.id === catId);
-      return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
-    };
-    const foodSub = (order.items || []).reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
-    const drinkSub = (order.items || []).reduce((s, i) => s + (isDrinkCat(i.categoryId) ? i.price * i.quantity : 0), 0);
-    const gstAmt = foodSub * taxRate;
-    const vatAmt = drinkSub * drinkTaxRate;
+    // Compute GST/VAT using unified helper and round them
+    const taxInfo = calculateOrderTax(order.items || [], categories, taxRate, drinkTaxRate);
+    const gstAmt = Math.round(taxInfo.gst);
+    const vatAmt = Math.round(taxInfo.vat);
 
 
     // iframe print
@@ -442,21 +437,17 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
       return sum + Object.values(cat.items).reduce((s, r) => s + r.total, 0);
     }, 0);
 
-    // Compute taxes and collected totals across selected orders
+    // Compute taxes and collected totals across selected orders (using rounded values)
     let totalGst = 0;
     let totalVat = 0;
     let totalDiscounts = 0;
     let totalCollected = 0;
     data.forEach(order => {
-      (order.items || []).forEach(it => {
-        const cat = categories.find(c => c.id === it.categoryId);
-        const taxType = cat?.taxType || (cat?.type === 'DRINK' ? 'VAT' : 'GST');
-        const itemSubtotal = (it.price || 0) * (it.quantity || 0);
-        if (taxType === 'VAT') totalVat += itemSubtotal * drinkTaxRate;
-        else totalGst += itemSubtotal * taxRate;
-      });
-      totalDiscounts += order.discountAmount || 0;
-      totalCollected += order.total || 0; // total already includes tax and discounts
+      const orderTaxInfo = calculateOrderTax(order.items || [], categories, taxRate, drinkTaxRate);
+      totalGst += Math.round(orderTaxInfo.gst);
+      totalVat += Math.round(orderTaxInfo.vat);
+      totalDiscounts += Math.round(order.discountAmount || 0);
+      totalCollected += Math.round(order.total || 0); // total already includes tax and discounts
     });
 
     const html = `
@@ -808,19 +799,12 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
                            exportOrders = safeOrders.filter(o => o.date && o.date.startsWith(opt.value));
                          }
                          if (exportOrders.length === 0) { alert('No orders for this period.'); return; }
-                         // Drink category detection for GST/VAT split
-                         const drinkPat = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
-                         const isDrinkCat = (catId: string) => {
-                           const cat = categories.find(c => c.id === catId);
-                           return cat ? (cat.type === 'DRINK' || (!cat.type && drinkPat.test(cat.name || ''))) : false;
-                         };
                          const headers = ['Bill No','Customer','Date','Time','Items','Order Type','Payment Mode','Subtotal','GST','VAT','Tax Total','Total'];
                          const escCSV = (v: string) => `"${String(v || '').replace(/"/g, '""')}"`;
                          const rows = exportOrders.map(o => {
-                           const foodSub = (o.items || []).reduce((s, i) => s + (!isDrinkCat(i.categoryId) ? (i.price * i.quantity) : 0), 0);
-                           const drinkSub = (o.items || []).reduce((s, i) => s + (isDrinkCat(i.categoryId) ? (i.price * i.quantity) : 0), 0);
-                           const gst = foodSub * taxRate;
-                           const vat = drinkSub * drinkTaxRate;
+                           const taxInfo = calculateOrderTax(o.items || [], categories, taxRate, drinkTaxRate);
+                           const gst = Math.round(taxInfo.gst);
+                           const vat = Math.round(taxInfo.vat);
                            return [
                             escCSV(o.billNo),
                             escCSV(o.customerName || 'Guest'),
@@ -829,11 +813,11 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
                             escCSV((o.items || []).map(i => `${i.name} x${i.quantity}`).join('; ')),
                             escCSV(o.orderType.replace('_', ' ')),
                             escCSV(o.paymentMode),
-                            (o.subtotal || 0).toFixed(2),
-                            gst.toFixed(2),
-                            vat.toFixed(2),
-                            (o.tax || 0).toFixed(2),
-                            (o.total || 0).toFixed(2),
+                            (o.subtotal || 0).toFixed(0),
+                            gst.toFixed(0),
+                            vat.toFixed(0),
+                            (o.tax || 0).toFixed(0),
+                            (o.total || 0).toFixed(0),
                            ].join(',');
                          });
                          const csv = [headers.join(','), ...rows].join('\n');
