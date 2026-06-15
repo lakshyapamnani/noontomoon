@@ -23,7 +23,8 @@ import {
   Utensils,
   Users,
   ArrowLeft,
-  Wallet
+  Wallet,
+  MessageSquare
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, TableCart } from '../types';
@@ -246,7 +247,12 @@ const mergeCartItems = (existing: CartItem[], incoming: CartItem[]): CartItem[] 
   incoming.forEach(item => {
     const idx = merged.findIndex(i => i.id === item.id);
     if (idx >= 0) {
-      merged[idx] = { ...merged[idx], quantity: merged[idx].quantity + item.quantity };
+      const mergedInstructions = [merged[idx].instructions, item.instructions].filter(Boolean).join(', ');
+      merged[idx] = { 
+        ...merged[idx], 
+        quantity: merged[idx].quantity + item.quantity,
+        instructions: mergedInstructions || undefined
+      };
     } else {
       merged.push(item);
     }
@@ -307,6 +313,25 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const [openItemForm, setOpenItemForm] = useState({ name: '', rate: '' });
   const mobileItemsScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileBillScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const [instructionItem, setInstructionItem] = useState<CartItem | null>(null);
+  const [instructionText, setInstructionText] = useState('');
+
+  const handleOpenInstruction = (item: CartItem) => {
+    setInstructionItem(item);
+    setInstructionText(item.instructions || '');
+  };
+
+  const updateInstruction = (id: string, text: string) => {
+    if (orderType === 'DINE_IN' && selectedTableId) {
+      updateTableCart(selectedTableId, (cart) => ({
+        ...cart,
+        items: cart.items.map(item => item.id === id ? { ...item, instructions: text || undefined } : item)
+      }));
+    } else {
+      setDefaultCart(prev => prev.map(item => item.id === id ? { ...item, instructions: text || undefined } : item));
+    }
+  };
 
   const isDrinkCategory = useMemo(() => {
     const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
@@ -870,6 +895,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           <div class="item-qty">${item.quantity}</div>
         </div>
         ${optionTags.length ? `<div class="item-option">(${escapeHtml(optionTags.join(' | '))})</div>` : ''}
+        ${item.instructions ? `<div class="item-instruction">* ${escapeHtml(item.instructions)}</div>` : ''}
       `;
     }).join('');
 
@@ -953,6 +979,12 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             .item-option {
               font-size: 10px;
               margin: 0 0 2px 6px;
+            }
+            .item-instruction {
+              font-size: 11px;
+              font-style: italic;
+              margin: 2px 0 2px 8px;
+              font-weight: 700;
             }
             .printed-at {
               margin-top: 6px;
@@ -1123,6 +1155,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       if (it.selectedMl) {
         itemLines.push(`  (${it.selectedMl})`);
       }
+      if (it.instructions) {
+        itemLines.push(`  * ${it.instructions}`);
+      }
     });
 
     const now = new Date();
@@ -1268,6 +1303,63 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             onConfirm={handleItemOptions}
             onClose={() => setOptionsItem(null)}
           />
+        )}
+
+        {/* KOT Custom Instructions Modal */}
+        {instructionItem && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 text-left">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-6 bg-orange-600 text-white">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tight">KOT Instructions</h3>
+                    <p className="text-xs font-bold opacity-80 uppercase mt-1 tracking-widest">{instructionItem.name}</p>
+                  </div>
+                  <button 
+                    onClick={() => setInstructionItem(null)}
+                    className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-8 space-y-6">
+                <div className="space-y-2 flex flex-col items-start">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Custom Instruction</label>
+                  <textarea 
+                    autoFocus
+                    rows={3}
+                    placeholder="e.g. Make it extra spicy, No onions, Less salt..."
+                    value={instructionText}
+                    onChange={(e) => setInstructionText(e.target.value)}
+                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl px-5 py-4 text-base font-bold text-gray-900 focus:ring-4 focus:ring-orange-50 focus:border-orange-500 outline-none transition-all placeholder:text-gray-300 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => {
+                      updateInstruction(instructionItem.id, '');
+                      setInstructionItem(null);
+                    }}
+                    className="flex-1 py-4 rounded-2xl font-black border-2 border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-sm"
+                  >
+                    CLEAR
+                  </button>
+                  <button 
+                    onClick={() => {
+                      updateInstruction(instructionItem.id, instructionText);
+                      setInstructionItem(null);
+                    }}
+                    className="flex-1 py-4 rounded-2xl font-black text-white text-sm shadow-xl bg-orange-600 hover:bg-orange-700 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    SAVE
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Open Item Modal */}
@@ -1542,8 +1634,23 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                   {currentCart.map(item => (
                     <div key={item.id} className="bg-white p-3 rounded-xl shadow-sm flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-bold text-gray-900 truncate">{item.name}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-sm font-bold text-gray-900 truncate">{item.name}</div>
+                          <button 
+                            onClick={() => handleOpenInstruction(item)}
+                            className="text-gray-400 hover:text-[#F57C00] p-0.5 rounded transition-colors shrink-0"
+                            title={item.instructions ? "Edit KOT Instruction" : "Add KOT Instruction"}
+                          >
+                            <Plus size={12} />
+                          </button>
+                        </div>
                         <div className="text-[11px] text-gray-500 font-medium">₹{item.price} each</div>
+                        {item.instructions && (
+                          <div className="text-[10px] text-orange-600 font-bold mt-0.5 italic flex items-center gap-1">
+                            <MessageSquare size={10} className="shrink-0" />
+                            <span className="truncate">{item.instructions}</span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1 shadow-sm">
                         <button onClick={() => updateQuantity(item.id, -1)} className="text-gray-400">
@@ -1670,6 +1777,63 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           onConfirm={handleItemOptions}
           onClose={() => setOptionsItem(null)}
         />
+      )}
+
+      {/* KOT Custom Instructions Modal */}
+      {instructionItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 text-left">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 bg-orange-600 text-white">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-black uppercase tracking-tight">KOT Instructions</h3>
+                  <p className="text-xs font-bold opacity-80 uppercase mt-1 tracking-widest">{instructionItem.name}</p>
+                </div>
+                <button 
+                  onClick={() => setInstructionItem(null)}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="space-y-2 flex flex-col items-start">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Custom Instruction</label>
+                <textarea 
+                  autoFocus
+                  rows={3}
+                  placeholder="e.g. Make it extra spicy, No onions, Less salt..."
+                  value={instructionText}
+                  onChange={(e) => setInstructionText(e.target.value)}
+                  className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl px-5 py-4 text-base font-bold text-gray-900 focus:ring-4 focus:ring-orange-50 focus:border-orange-500 outline-none transition-all placeholder:text-gray-300 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    updateInstruction(instructionItem.id, '');
+                    setInstructionItem(null);
+                  }}
+                  className="flex-1 py-4 rounded-2xl font-black border-2 border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-sm"
+                >
+                  CLEAR
+                </button>
+                <button 
+                  onClick={() => {
+                    updateInstruction(instructionItem.id, instructionText);
+                    setInstructionItem(null);
+                  }}
+                  className="flex-1 py-4 rounded-2xl font-black text-white text-sm shadow-xl bg-orange-600 hover:bg-orange-700 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  SAVE
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {variant === 'desktop' && (
@@ -1944,9 +2108,22 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                         </span>
                       )}
                     </h4>
+                    <button 
+                      onClick={() => handleOpenInstruction(item)}
+                      className="text-gray-400 hover:text-[#F57C00] p-0.5 rounded transition-colors shrink-0"
+                      title={item.instructions ? "Edit KOT Instruction" : "Add KOT Instruction"}
+                    >
+                      <Plus size={12} />
+                    </button>
                   </div>
 
                   <p className="text-[11px] text-gray-500 font-medium">₹{item.price} per unit</p>
+                  {item.instructions && (
+                    <div className="text-[10px] text-orange-600 font-bold mt-0.5 italic flex items-center gap-1">
+                      <MessageSquare size={10} className="shrink-0" />
+                      <span className="truncate">{item.instructions}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1 shadow-sm">
                   <button onClick={() => updateQuantity(item.id, -1)} className="p-1 hover:text-[#F57C00] text-gray-400"><Minus size={14} /></button>

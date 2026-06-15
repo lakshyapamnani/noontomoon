@@ -66,6 +66,7 @@ export interface CartItem extends MenuItem {
   selectedMl?: string;
   addedAt?: number;
   printedQty?: number;
+  instructions?: string;
 }
 
 export interface TableCart {
