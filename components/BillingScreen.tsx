@@ -717,13 +717,107 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }
   };
 
+  // ── ESC/POS WiFi Thermal Printing ──────────────────────────────────────
+  const sendEscPosBill = async (order: Order, gst: number, vat: number): Promise<boolean> => {
+    const serverUrl = restaurantInfo.printServerUrl?.trim();
+    const printerIp = restaurantInfo.billPrinterIp?.trim();
+    if (!serverUrl || !printerIp) return false;
+
+    const foodItems = order.items.filter(it => {
+      const cat = categories.find(c => c.id === it.categoryId);
+      return cat?.type !== 'DRINK';
+    }).map(it => ({
+      name: it.name,
+      quantity: it.quantity,
+      price: it.price,
+      selectedPortion: it.selectedPortion,
+      selectedMl: it.selectedMl,
+    }));
+
+    const drinkItems = order.items.filter(it => {
+      const cat = categories.find(c => c.id === it.categoryId);
+      return cat?.type === 'DRINK';
+    }).map(it => ({
+      name: it.name,
+      quantity: it.quantity,
+      price: it.price,
+      selectedPortion: it.selectedPortion,
+      selectedMl: it.selectedMl,
+    }));
+
+    const billData = {
+      restaurantName: restaurantInfo.name,
+      restaurantAddress: restaurantInfo.address,
+      restaurantPhone: restaurantInfo.phone,
+      billNo: order.billNo,
+      tableName: order.tableName || '',
+      customerName: order.customerName || '',
+      date: order.date,
+      time: order.time,
+      orderType: order.orderType,
+      foodItems,
+      drinkItems,
+      subtotal: Math.round(order.subtotal),
+      gst: Math.round(gst),
+      gstPercent: Math.round(taxRate * 100),
+      vat: Math.round(vat),
+      vatPercent: Math.round(drinkTaxRate * 100),
+      tax: Math.round(order.tax),
+      discountPercent: order.discountPercent || 0,
+      discountAmount: Math.round(order.discountAmount || 0),
+      total: Math.round(order.total),
+      paymentMode: order.paymentMode,
+      gstNo: restaurantInfo.gstNo,
+      vatNo: restaurantInfo.vatNo,
+      fssaiNo: restaurantInfo.fssaiNo,
+    };
+
+    try {
+      const res = await fetch(`${serverUrl}/print-bill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: billData, printerIp }),
+      });
+      const result = await res.json();
+      return result.ok === true;
+    } catch (err) {
+      console.warn('[ESC/POS] Bill print failed, falling back to browser print:', err);
+      return false;
+    }
+  };
+
+  const sendEscPosKot = async (selectedTable: Table | undefined, itemsToPrint?: CartItem[]): Promise<boolean> => {
+    const serverUrl = restaurantInfo.printServerUrl?.trim();
+    const printerIp = restaurantInfo.kotPrinterIp?.trim();
+    if (!serverUrl || !printerIp) return false;
+
+    const lines = buildKotPrintLines(selectedTable, itemsToPrint);
+
+    try {
+      const res = await fetch(`${serverUrl}/print-kot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines, printerIp }),
+      });
+      const result = await res.json();
+      return result.ok === true;
+    } catch (err) {
+      console.warn('[ESC/POS] KOT print failed, falling back to browser print:', err);
+      return false;
+    }
+  };
+
   const printReceipt = async (order: Order) => {
     // Compute GST/VAT for this order using category tax types via shared utility and round them
     const orderTaxInfo = calculateOrderTax(order.items, categories, taxRate, drinkTaxRate);
     const roundedGst = Math.round(orderTaxInfo.gst);
     const roundedVat = Math.round(orderTaxInfo.vat);
 
-    doIframeReceiptPrint(order, roundedGst, roundedVat);
+    // Try ESC/POS thermal printer first, fall back to browser print
+    const escPosSuccess = await sendEscPosBill(order, roundedGst, roundedVat);
+    if (!escPosSuccess) {
+      doIframeReceiptPrint(order, roundedGst, roundedVat);
+    }
   };
 
   const printHtmlContent = (htmlContent: string) => {
@@ -1053,7 +1147,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     }
 
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    doIframeKotPrint(selectedTable, itemsToPrint);
+    // Try ESC/POS thermal printer first, fall back to browser print
+    const escPosSuccess = await sendEscPosKot(selectedTable, itemsToPrint);
+    if (!escPosSuccess) {
+      doIframeKotPrint(selectedTable, itemsToPrint);
+    }
 
     // Update printedQty to match quantity for all items in cart
     if (orderType === 'DINE_IN' && selectedTableId) {
@@ -1078,7 +1176,11 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       return;
     }
     const selectedTable = tables.find(t => t.id === selectedTableId);
-    doIframeKotPrint(selectedTable, currentCart);
+    // Try ESC/POS thermal printer first, fall back to browser print
+    const escPosSuccess = await sendEscPosKot(selectedTable, currentCart);
+    if (!escPosSuccess) {
+      doIframeKotPrint(selectedTable, currentCart);
+    }
 
     // Also update printedQty so subsequent printKOT doesn't double print
     if (orderType === 'DINE_IN' && selectedTableId) {

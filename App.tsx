@@ -1118,6 +1118,63 @@ const App: React.FC = () => {
     const discountAmount = totals.discountAmount;
     const total = totals.total;
 
+    // ── Try ESC/POS thermal printer first ──
+    const serverUrl = restaurantInfo.printServerUrl?.trim();
+    const printerIp = restaurantInfo.billPrinterIp?.trim();
+    if (serverUrl && printerIp) {
+      const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+      const isDrinkCat = (catId: string) => {
+        const cat = categories.find(c => String(c.id) === String(catId));
+        return cat ? (cat.type === 'DRINK' || (!cat.type && drinkNamePattern.test(cat.name || ''))) : false;
+      };
+
+      const billData = {
+        restaurantName: restaurantInfo.name,
+        restaurantAddress: restaurantInfo.address,
+        restaurantPhone: restaurantInfo.phone,
+        billNo: `INV-${billCounter + 1}`,
+        tableName,
+        customerName: customerName !== 'Guest' ? customerName : '',
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        orderType: 'DINE_IN',
+        foodItems: items.filter(it => !isDrinkCat(it.categoryId)).map(it => ({
+          name: it.name, quantity: it.quantity, price: it.price,
+          selectedPortion: it.selectedPortion, selectedMl: it.selectedMl,
+        })),
+        drinkItems: items.filter(it => isDrinkCat(it.categoryId)).map(it => ({
+          name: it.name, quantity: it.quantity, price: it.price,
+          selectedPortion: it.selectedPortion, selectedMl: it.selectedMl,
+        })),
+        subtotal: Math.round(subtotal),
+        gst: Math.round(gstAmount),
+        gstPercent: Math.round(taxRate * 100),
+        vat: Math.round(vatAmount),
+        vatPercent: Math.round(drinkTaxRate * 100),
+        tax: Math.round(taxAmount),
+        discountPercent,
+        discountAmount: Math.round(discountAmount),
+        total: Math.round(total),
+        paymentMode: 'NOT PAID',
+        gstNo: restaurantInfo.gstNo,
+        vatNo: restaurantInfo.vatNo,
+        fssaiNo: restaurantInfo.fssaiNo,
+      };
+
+      try {
+        const res = await fetch(`${serverUrl}/print-bill`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: billData, printerIp }),
+        });
+        const result = await res.json();
+        if (result.ok === true) return; // ESC/POS print succeeded, no need for browser print
+      } catch (err) {
+        console.warn('[ESC/POS] Table bill print failed, falling back to browser print:', err);
+      }
+    }
+
+    // ── Fall back to browser print dialog ──
     const printHtmlContent = (htmlContent: string) => {
       document.getElementById('print-section')?.remove();
       document.getElementById('print-section-style')?.remove();
