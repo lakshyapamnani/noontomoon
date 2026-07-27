@@ -741,6 +741,9 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           display: block !important;
           visibility: visible !important;
         }
+        #print-section style, #print-section script {
+          display: none !important;
+        }
         #print-section {
           position: absolute;
           left: 0;

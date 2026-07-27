@@ -143,6 +143,9 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
             display: block !important;
             visibility: visible !important;
           }
+          #print-section style, #print-section script {
+            display: none !important;
+          }
           #print-section {
             position: absolute;
             left: 0;
@@ -258,6 +261,9 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
           #print-section, #print-section * {
             display: block !important;
             visibility: visible !important;
+          }
+          #print-section style, #print-section script {
+            display: none !important;
           }
           #print-section {
             position: absolute;
@@ -382,6 +388,9 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
           #print-section, #print-section * {
             display: block !important;
             visibility: visible !important;
+          }
+          #print-section style, #print-section script {
+            display: none !important;
           }
           #print-section {
             position: absolute;
