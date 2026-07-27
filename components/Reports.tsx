@@ -277,14 +277,6 @@ const Reports: React.FC<ReportsProps> = ({ orders, onStartNewDay }) => {
               `).join('')}
             </tbody>
           </table>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
         </body>
       </html>
     `;
@@ -292,14 +284,17 @@ const Reports: React.FC<ReportsProps> = ({ orders, onStartNewDay }) => {
     iframeDoc.write(html);
     iframeDoc.close();
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        document.body.removeChild(iframe);
-        window.removeEventListener('message', handleMessage);
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Print error:", err);
       }
-    };
-    window.addEventListener('message', handleMessage);
-    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 150);
   };
 
   // Chart colors

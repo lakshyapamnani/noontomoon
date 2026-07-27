@@ -887,15 +887,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             <p class="bold">Thank you!</p>
             <p class="bold">Visit again.</p>
           </div>
-          <script>
-            window.onload = function() {
-              window.focus();
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
         </body>
       </html>
     `;
@@ -903,17 +894,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     iframeDoc.write(html);
     iframeDoc.close();
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-        window.removeEventListener('message', handleMessage);
-      }
-    };
-    window.addEventListener('message', handleMessage);
     setTimeout(() => {
-      if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      window.removeEventListener('message', handleMessage);
-    }, 300000); // 5 minutes fallback
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Print error:", err);
+      }
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 150);
   };
 
   const doIframeKotPrint = (selectedTable: Table | undefined, itemsToPrint?: CartItem[]) => {
@@ -1053,15 +1044,6 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           ${itemRows}
           <div class="divider"></div>
           <div class="printed-at">Printed at ${escapeHtml(printedAt)}</div>
-          <script>
-            window.onload = function() {
-              window.focus();
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
         </body>
       </html>
     `;
@@ -1069,17 +1051,17 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     iframeDoc.write(html);
     iframeDoc.close();
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-        window.removeEventListener('message', handleMessage);
-      }
-    };
-    window.addEventListener('message', handleMessage);
     setTimeout(() => {
-      if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      window.removeEventListener('message', handleMessage);
-    }, 300000);
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Print error:", err);
+      }
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 150);
   };
 
   const printKOT = async () => {

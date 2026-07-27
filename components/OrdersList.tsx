@@ -209,28 +209,23 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
             <p>Thank you!</p>
             <p>Visit again.</p>
           </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
         </body>
       </html>
     `;
     iframeDoc.write(html);
     iframeDoc.close();
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        document.body.removeChild(iframe);
-        window.removeEventListener('message', handleMessage);
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Print error:", err);
       }
-    };
-    window.addEventListener('message', handleMessage);
-    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 150);
   };
 
   const exportToPDF = (data: Order[], subTitle: string) => {
@@ -311,28 +306,23 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
               `).join('')}
             </tbody>
           </table>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
         </body>
       </html>
     `;
     iframeDoc.write(html);
     iframeDoc.close();
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        document.body.removeChild(iframe);
-        window.removeEventListener('message', handleMessage);
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Print error:", err);
       }
-    };
-    window.addEventListener('message', handleMessage);
-    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 150);
   };
 
   const exportKOTSummary = (data: Order[], subTitle: string, categoryFilter: 'all' | string) => {
@@ -521,28 +511,23 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
           </div>
           <div class="line"></div>
           <div class="center sub" style="margin-top:6px;">End of summary</div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
         </body>
       </html>
     `;
     iframeDoc.write(html);
     iframeDoc.close();
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        document.body.removeChild(iframe);
-        window.removeEventListener('message', handleMessage);
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Print error:", err);
       }
-    };
-    window.addEventListener('message', handleMessage);
-    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 150);
   };
 
   const renderTable = (data: Order[], emptyMessage: string = "No orders found.") => (

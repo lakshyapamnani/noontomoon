@@ -1261,34 +1261,28 @@ const App: React.FC = () => {
             ${restaurantInfo.vatNo && restaurantInfo.vatNo !== 'NOT SET' ? `<div>VAT NO: ${restaurantInfo.vatNo}</div>` : ''}
             ${restaurantInfo.fssaiNo && restaurantInfo.fssaiNo !== 'NOT SET' ? `<div>FSSAI NO: ${restaurantInfo.fssaiNo}</div>` : ''}
           </div>
+          </div>
           <div class="footer center">
             <p class="bold">Thank you!</p>
             <p class="bold">Visit again.</p>
           </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => {
-                window.parent.postMessage('print-done', '*');
-              }, 500);
-            };
-          </script>
         </body>
       </html>
     `;
     iframeDoc.write(html);
     iframeDoc.close();
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data === 'print-done') {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-        window.removeEventListener('message', handleMessage);
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Print error:", err);
       }
-    };
-    window.addEventListener('message', handleMessage);
-    setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 5000);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 150);
   };
 
 
