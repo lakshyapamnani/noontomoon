@@ -1,14 +1,14 @@
 const fs = require('fs');
 
 const data = {
-  "restaurant": "Noon To Moon",
+  "restaurant": "Drona",
   "menu": [
     {
       "category": "Oriental Veg Starter",
       "items": [
         {"name": "Crispy Vegetable", "type": "veg", "prices": {"full": 320}},
         {"name": "Veg Salt N Pepper", "type": "veg", "prices": {"full": 320}},
-        {"name": "Noon To Moon Chilli Cottage Cheese", "type": "veg", "prices": {"full": 310}},
+        {"name": "Drona Chilli Cottage Cheese", "type": "veg", "prices": {"full": 310}},
         {"name": "Crispy Corn Chilli Pepper", "type": "veg", "prices": {"full": 310}},
         {"name": "Mushroom Ginger Chilli", "type": "veg", "prices": {"full": 330}},
         {"name": "Veg Manchurian Dry", "type": "veg", "prices": {"full": 320}},
@@ -99,7 +99,7 @@ const data = {
         {"name": "Veg Kadhai", "type": "veg", "prices": {"full": 310}},
         {"name": "Paneer Pasanda", "type": "veg", "prices": {"full": 350}},
         {"name": "Paneer Garlic Masala", "type": "veg", "prices": {"full": 330}},
-        {"name": "Noon To Moon Special Subz", "type": "veg", "prices": {"full": 385}},
+        {"name": "Drona Special Subz", "type": "veg", "prices": {"full": 385}},
         {"name": "Subz Tawa Masala", "type": "veg", "prices": {"full": 340}},
         {"name": "Dm Ka Khumb", "type": "veg", "prices": {"full": 330}},
         {"name": "Subz Maratha", "type": "veg", "prices": {"full": 320}},

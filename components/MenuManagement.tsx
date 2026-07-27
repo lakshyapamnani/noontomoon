@@ -639,6 +639,17 @@ const MenuManagement: React.FC<MenuManagementProps> = ({
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-black text-gray-900 mb-2 uppercase">UPI ID for Payments</label>
+                      <input 
+                       type="text" 
+                       value={localRestaurantInfo.upiId || ''} 
+                       onChange={(e) => setLocalRestaurantInfo({...localRestaurantInfo, upiId: e.target.value})}
+                       placeholder="e.g., merchant@upi"
+                       className="w-full p-4 rounded-xl border-2 border-gray-300 text-gray-900 font-black focus:ring-2 focus:ring-[#F57C00] outline-none shadow-inner placeholder:text-gray-400" 
+                      />
+                    </div>
+
                     <hr className="my-6 border-gray-200" />
                    <h4 className="text-lg font-black text-gray-900 mb-4">Printer Setup</h4>
                     <div>

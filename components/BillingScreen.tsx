@@ -27,9 +27,11 @@ import {
   MessageSquare
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor, TableCart } from '../types';
+import { Category, MenuItem, CartItem, OrderType, PaymentMode, Order, RestaurantInfo, Table, Floor } from '../types';
 import TablesGrid from './TablesGrid';
 import { calculateOrderTax, calculateOrderTotals } from '../utils/tax';
+import { db } from '../firebase';
+import { ref, set } from 'firebase/database';
 
 const BILL_UPI_ID = 'lakshaypamnani2@okaxis';
 
@@ -502,6 +504,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       name: openItemForm.name,
       price: rateFloat,
       categoryId: openItemModal.type === 'DRINK' ? 'OPEN_BAR' : 'OPEN_FOOD',
+      isVeg: true,
       vegType: 'VEG',
       nonVegPrice: 0,
       vegPrice: 0,
@@ -671,6 +674,48 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   const tax = totals.tax;
   const discountAmount = totals.discountAmount;
   const total = totals.total;
+
+  const handleSendUpiQrToMobile = async () => {
+    const selectedTableItems = selectedTableId
+      ? tableCarts[selectedTableId]?.items || []
+      : [];
+    const checkoutItems = currentCart.length > 0 ? currentCart : selectedTableItems;
+    
+    if (checkoutItems.length === 0) {
+      alert("Please add items to the cart first.");
+      return;
+    }
+
+    const checkoutTotals = calculateOrderTotals(
+      checkoutItems,
+      categories,
+      taxRate,
+      drinkTaxRate,
+      discountType,
+      discountValue
+    );
+
+    const upiId = (restaurantInfo.upiId || "").trim() || BILL_UPI_ID;
+    const upiName = restaurantInfo.name || "Drona";
+    const amount = checkoutTotals.total;
+    const billNo = `INV-${billCounter + 1}`;
+    const upiUri = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${amount}&cu=INR&tn=Order%20${billNo}`;
+    
+    try {
+      await set(ref(db, 'activeUpiQr'), {
+        amount,
+        billNo,
+        upiId,
+        upiName,
+        upiUri,
+        timestamp: Date.now()
+      });
+      alert(`Sent QR for ₹${amount} to customer mobile display!`);
+    } catch (err) {
+      console.error("Error setting active UPI QR in Firebase:", err);
+      alert("Failed to send QR to display.");
+    }
+  };
 
   const printReceipt = async (order: Order) => {
     // Compute GST/VAT for this order using category tax types via shared utility and round them
@@ -1980,7 +2025,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
             </p>
           </div>
         ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           {filteredItems.map(item => {
             if (!item) return null;
             return (
@@ -2026,7 +2071,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       </div>
       </div>
 
-      <div className="w-[30%] bg-white border-l shadow-2xl flex flex-col shrink-0 z-10 h-full overflow-hidden">
+      <div className="w-[340px] md:w-[360px] lg:w-[30%] lg:min-w-[380px] bg-white border-l shadow-2xl flex flex-col shrink-0 z-10 h-full overflow-hidden">
         {/* Table indicator for Dine In */}
         {orderType === 'DINE_IN' && selectedTableId && (
           <div className="px-4 py-2 bg-[#F57C00] text-white text-center">
@@ -2125,14 +2170,14 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 bg-gray-50 border rounded-xl p-1 shadow-sm">
-                  <button onClick={() => updateQuantity(item.id, -1)} className="p-1 hover:text-[#F57C00] text-gray-400"><Minus size={14} /></button>
-                  <span className="w-8 text-center font-black text-sm text-gray-900">{item.quantity}</span>
-                  <button onClick={() => updateQuantity(item.id, 1)} className="p-1 hover:text-[#F57C00] text-gray-400"><Plus size={14} /></button>
+                <div className="flex items-center gap-1 bg-gray-50 border rounded-xl p-0.5 shadow-sm">
+                  <button onClick={() => updateQuantity(item.id, -1)} className="p-2 hover:text-[#F57C00] text-gray-500 rounded-lg active:bg-gray-150 transition-colors"><Minus size={12} /></button>
+                  <span className="w-6 text-center font-black text-xs text-gray-900 select-none">{item.quantity}</span>
+                  <button onClick={() => updateQuantity(item.id, 1)} className="p-2 hover:text-[#F57C00] text-gray-500 rounded-lg active:bg-gray-150 transition-colors"><Plus size={12} /></button>
                 </div>
-                <div className="w-16 text-right font-black text-sm text-gray-900">₹{item.price * item.quantity}</div>
-                <button onClick={() => removeFromCart(item.id)} className="text-gray-200 hover:text-black transition-colors">
-                  <Trash2 size={16} />
+                <div className="w-14 text-right font-black text-xs text-gray-900">₹{item.price * item.quantity}</div>
+                <button onClick={() => removeFromCart(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-50 shrink-0">
+                  <Trash2 size={18} />
                 </button>
               </div>
             ))
@@ -2228,9 +2273,19 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           <div className="flex gap-2">
             <PaymentTab active={paymentMode === 'CASH'} onClick={() => setPaymentMode('CASH')} icon={<Banknote size={16} />} label="Cash" />
             <PaymentTab active={paymentMode === 'CARD'} onClick={() => setPaymentMode('CARD')} icon={<CreditCard size={16} />} label="Card" />
-            <PaymentTab active={paymentMode === 'UPI'} onClick={() => setPaymentMode('UPI')} icon={<Smartphone size={16} />} label="UPI" />
+            <PaymentTab active={paymentMode === 'UPI'} onClick={() => { setPaymentMode('UPI'); handleSendUpiQrToMobile(); }} icon={<Smartphone size={16} />} label="UPI" />
             <PaymentTab active={paymentMode === 'OTHER'} onClick={() => setPaymentMode('OTHER')} icon={<Wallet size={16} />} label="Others" />
           </div>
+
+          {paymentMode === 'UPI' && (
+            <button
+              onClick={handleSendUpiQrToMobile}
+              className="w-full bg-orange-50 hover:bg-orange-100 text-[#F57C00] py-2.5 px-3 rounded-xl font-black flex items-center justify-center gap-1.5 border border-orange-200 transition-all active:scale-[0.98] text-xs uppercase tracking-wider"
+            >
+              <Smartphone size={14} className="animate-pulse" />
+              Display UPI QR on Mobile Screen
+            </button>
+          )}
 
           <div className="grid grid-cols-4 gap-1.5">
             <button 

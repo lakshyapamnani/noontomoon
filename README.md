@@ -1,20 +1,66 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+## DINEX — Premium Restaurant POS + Kiosk (localStorage build)
 
-# Run and deploy your AI Studio app
+This project is a **production-shaped** POS + self-order kiosk app with a separate **Node.js ESC/POS print server**.
 
-This contains everything you need to run your app locally.
+### Tech
 
-View your app in AI Studio: https://ai.studio/apps/drive/1XXFJUJaW49k23omAyz9lXIxKM0_b2A9s
+- **Frontend**: React + Vite + TypeScript + Tailwind + Router + Zustand + React Hook Form + Zod + Recharts + Framer Motion
+- **Data (for now)**: localStorage (versioned DINEX DB)
+- **Printing**: Node.js + Express + ESC/POS over LAN (Ethernet printers by IP)
 
-## Run Locally
+### Quick start (web app)
 
-**Prerequisites:**  Node.js
+```bash
+npm install
+npm run dev
+```
 
+Open `http://localhost:5173`.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- Login roles are seeded automatically on first run.
+- **Default PIN** for all demo users: `1234`
+
+### Quick start (print server)
+
+In a second terminal:
+
+```bash
+cd print-server
+npm install
+npm run start
+```
+
+The server listens on `http://localhost:8787`.
+
+Optional environment variables:
+
+```bash
+set PORT=8787
+set VEG_PRINTER_IP=192.168.1.50
+set NONVEG_PRINTER_IP=192.168.1.51
+set BILL_PRINTER_IP=192.168.1.52
+set PRINTER_PORT=9100
+```
+
+### App URLs
+
+- **Login**: `/login`
+- **Launcher**: `/launcher`
+- **Kiosk**: `/kiosk`
+- **Counter**: `/counter`
+- **Kitchen**: `/kitchen`
+- **Waiter**: `/waiter`
+- **Orders**: `/orders`
+- **Reports**: `/reports`
+- **Inventory**: `/inventory`
+- **Admin**: `/admin`
+- **Customers**: `/customers`
+
+### Notes
+
+- This build uses localStorage to keep the app fully functional without Firebase. The architecture is already modular so you can swap in Firebase services later.
+- Printing is routed by item type:
+  - **Veg-only** → Veg printer
+  - **Non-veg-only** → Non-veg printer
+  - **Mixed** → split and print to both
+

@@ -3,20 +3,22 @@ import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
+import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA-CC1rbMiUzhaGXclen8nhvd0A5IGdVp0",
-  authDomain: "noon-to-moon.firebaseapp.com",
-  databaseURL: "https://noon-to-moon-default-rtdb.firebaseio.com",
-  projectId: "noon-to-moon",
-  storageBucket: "noon-to-moon.firebasestorage.app",
-  messagingSenderId: "463718515822",
-  appId: "1:463718515822:web:76e4dba2c2ba287b8c927f",
-  measurementId: "G-S8QF41YC97"
+  apiKey: "AIzaSyCxT32NHzwYLhcwm53b4g2wudkTrLo6uZE",
+  authDomain: "masalabox-8c4e1.firebaseapp.com",
+  databaseURL: "https://masalabox-8c4e1-default-rtdb.firebaseio.com",
+  projectId: "masalabox-8c4e1",
+  storageBucket: "masalabox-8c4e1.firebasestorage.app",
+  messagingSenderId: "62100586695",
+  appId: "1:62100586695:web:2bc0d1814107c03df67ee2",
+  measurementId: "G-QTXG8R88MF"
 };
 
 const app = initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
+export const analytics = getAnalytics(app);
 export default app;

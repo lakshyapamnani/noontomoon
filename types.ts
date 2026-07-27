@@ -31,6 +31,7 @@ export interface RestaurantInfo {
   kotPrinterIp?: string;
   useUsbForBill?: boolean;
   kotPrintWindowMins?: number;
+  upiId?: string;
 }
 
 export type VegType = 'VEG' | 'NON_VEG' | 'SEAFOOD' | 'BOTH';

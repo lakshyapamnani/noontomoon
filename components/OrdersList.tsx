@@ -267,7 +267,7 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
           </style>
         </head>
         <body>
-          <h1>NOON TO MOON POS</h1>
+          <h1>DRONA POS</h1>
           <h2>${title} (${subTitle})</h2>
           <p>Generated: ${new Date().toLocaleString()}</p>
           <div class="summary">

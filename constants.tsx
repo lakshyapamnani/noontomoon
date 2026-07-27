@@ -162,7 +162,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
   // Oriental Non-Veg Starters (cat15)
   { id: 'onvs1', name: 'Stir Fried Chicken With Fresh Basil', price: 375, categoryId: 'cat15', isVeg: false, vegType: 'NON_VEG' },
   { id: 'onvs2', name: 'Crispy Chicken', price: 360, categoryId: 'cat15', isVeg: false, vegType: 'NON_VEG' },
-  { id: 'onvs3', name: 'Noon To Moon Chilli Chicken', price: 360, categoryId: 'cat15', isVeg: false, vegType: 'NON_VEG' },
+  { id: 'onvs3', name: 'Drona Chilli Chicken', price: 360, categoryId: 'cat15', isVeg: false, vegType: 'NON_VEG' },
   { id: 'onvs4', name: 'Chicken Lollipop', price: 360, categoryId: 'cat15', isVeg: false, vegType: 'NON_VEG' },
   { id: 'onvs5', name: 'Chicken Black Pepper Dry', price: 420, categoryId: 'cat15', isVeg: false, vegType: 'NON_VEG' },
   { id: 'onvs6', name: 'Butter Garlic Prawns', price: 420, categoryId: 'cat15', isVeg: false, vegType: 'SEAFOOD' },
@@ -217,7 +217,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
   { id: 'vmc10', name: 'Veg Kadhai', price: 310, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
   { id: 'vmc11', name: 'Paneer Pasanda', price: 350, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
   { id: 'vmc12', name: 'Paneer Garlic Masala', price: 330, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
-  { id: 'vmc13', name: 'Noon To Moon Special Subz', price: 385, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
+  { id: 'vmc13', name: 'Drona Special Subz', price: 385, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
   { id: 'vmc14', name: 'Subz Tawa Masala', price: 340, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
   { id: 'vmc15', name: 'Dm Ka Khumb', price: 330, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
   { id: 'vmc16', name: 'Subz Maratha', price: 320, categoryId: 'cat18', isVeg: true, vegType: 'VEG' },
@@ -257,7 +257,7 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
   // Oriental Veg Starters (cat24)
   { id: 'ovs1', name: 'Crispy Vegetable', price: 320, categoryId: 'cat24', isVeg: true, vegType: 'VEG' },
   { id: 'ovs2', name: 'Veg Salt N Pepper', price: 320, categoryId: 'cat24', isVeg: true, vegType: 'VEG' },
-  { id: 'ovs3', name: 'Noon To Moon Chilli Cottage Cheese', price: 310, categoryId: 'cat24', isVeg: true, vegType: 'VEG' },
+  { id: 'ovs3', name: 'Drona Chilli Cottage Cheese', price: 310, categoryId: 'cat24', isVeg: true, vegType: 'VEG' },
   { id: 'ovs4', name: 'Crispy Corn Chilli Pepper', price: 310, categoryId: 'cat24', isVeg: true, vegType: 'VEG' },
   { id: 'ovs5', name: 'Mushroom Ginger Chill', price: 330, categoryId: 'cat24', isVeg: true, vegType: 'VEG' },
   { id: 'ovs6', name: 'Veg. Manchurian Dry', price: 320, categoryId: 'cat24', isVeg: true, vegType: 'VEG' },
@@ -414,7 +414,7 @@ export const TAX_RATE = 0.05;
 export const DRINK_TAX_RATE = 0.05;
 
 export const INITIAL_RESTAURANT_INFO = {
-  name: "Noon To Moon",
+  name: "Drona",
   phone: "9321370001",
   address: "Shop No. 6,7,8, Patel Zion, Near Reliance Digital, Palegaon",
   gstNo: 'NOT SET',

@@ -32,8 +32,7 @@ import {
   OrderStatus,
   RestaurantInfo,
   Table,
-  Floor,
-  PrinterSettings
+  Floor
 } from './types';
 import {
   INITIAL_CATEGORIES,
@@ -48,6 +47,7 @@ import OrdersList from './components/OrdersList';
 import Reports from './components/Reports';
 import MenuManagement from './components/MenuManagement';
 import TablesGrid from './components/TablesGrid';
+import MobileQrPage from './components/MobileQrPage';
 
 // Firebase imports
 import { isOrderInCurrentBusinessDay } from './utils/businessDay';
@@ -106,6 +106,11 @@ const App: React.FC = () => {
   const [isMobileRoute, setIsMobileRoute] = useState(() => {
     const path = window.location.pathname.toLowerCase();
     return path === '/mobile' || path === '/mobile/' || path.startsWith('/mobile');
+  });
+  // Check if URL path is /mobileqr for customer display screen
+  const [isMobileQrRoute] = useState(() => {
+    const path = window.location.pathname.toLowerCase();
+    return path === '/mobileqr' || path === '/mobileqr/';
   });
   const [mobileTab, setMobileTab] = useState<'analytics' | 'orders' | 'bills' | 'reports' | 'billing' | 'tablesConfig'>('billing');
   const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -465,7 +470,7 @@ const App: React.FC = () => {
             const savedDrinkTax = localStorage.getItem('drona_drink_tax_rate');
             const drinkTaxRateVal = savedDrinkTax ? parseFloat(savedDrinkTax) : 0;
             const restaurantVal = {
-              name: user?.displayName || 'NOON TO MOON CAFE',
+              name: user?.displayName || 'DRONA CAFE',
               phone: '+91 9876543210',
               address: '123 Main Street, Food Park, City'
             };
@@ -1487,6 +1492,11 @@ const App: React.FC = () => {
     );
   };
 
+  // Mobile QR display screen - no authentication required
+  if (isMobileQrRoute) {
+    return <MobileQrPage />;
+  }
+
   // Auth loading state
   if (authLoading) {
     return (
@@ -1655,7 +1665,7 @@ const App: React.FC = () => {
               <MenuIcon size={24} className="text-gray-600" />
             </button>
             <div className="hidden md:flex items-center gap-2">
-              <span className="text-[#F57C00] font-bold text-lg">NOON TO MOON</span>
+              <span className="text-[#F57C00] font-bold text-lg">DRONA</span>
               <div className="h-6 w-px bg-gray-200 mx-2"></div>
               <button
                 onClick={() => setActiveScreen('TABLES')}
