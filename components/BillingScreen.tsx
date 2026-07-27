@@ -821,50 +821,53 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
   };
 
   const printHtmlContent = (htmlContent: string) => {
+    // Clean up any previous print sections
     document.getElementById('print-section')?.remove();
     document.getElementById('print-section-style')?.remove();
 
+    // Physically hide the entire app - PWA standalone mode ignores @media print
+    const root = document.getElementById('root');
+    const originalRootDisplay = root?.style.display || '';
+    if (root) root.style.display = 'none';
+
+    // Hide all direct body children
+    const bodyChildren = Array.from(document.body.children) as HTMLElement[];
+    const originalDisplays = bodyChildren.map(el => el.style.display);
+    bodyChildren.forEach(el => { el.style.display = 'none'; });
+
+    // Create print section with receipt content
+    const printSection = document.createElement('div');
+    printSection.id = 'print-section';
+    printSection.style.cssText = 'position:absolute;left:0;top:0;width:100%;margin:0;padding:0;background:white;z-index:999999;';
+    printSection.innerHTML = htmlContent;
+    document.body.appendChild(printSection);
+
+    // Also add a style to ensure clean printing
     const printStyle = document.createElement('style');
     printStyle.id = 'print-section-style';
     printStyle.innerHTML = `
       @media print {
-        body > *:not(#print-section) {
-          display: none !important;
-        }
-        #print-section, #print-section * {
-          display: block !important;
-          visibility: visible !important;
-        }
-        #print-section style, #print-section script {
-          display: none !important;
-        }
-        #print-section {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-          margin: 0;
-          padding: 0;
-          background: white !important;
-        }
+        body { margin: 0 !important; padding: 0 !important; background: white !important; }
+        #print-section style, #print-section script { display: none !important; }
       }
+      #print-section style, #print-section script { display: none !important; }
     `;
     document.head.appendChild(printStyle);
 
-    const printSection = document.createElement('div');
-    printSection.id = 'print-section';
-    printSection.innerHTML = htmlContent;
-    document.body.appendChild(printSection);
-
+    // Give the browser a moment to reflow, then print
     setTimeout(() => {
       window.focus();
       window.print();
-      
+
+      // Restore everything after print dialog closes
       setTimeout(() => {
         printSection.remove();
         printStyle.remove();
-      }, 1000);
-    }, 150);
+        // Restore all body children visibility
+        bodyChildren.forEach((el, i) => { el.style.display = originalDisplays[i]; });
+        if (root) root.style.display = originalRootDisplay;
+      }, 500);
+    }, 200);
   };
 
   const doIframeReceiptPrint = (order: Order, orderGst: number, orderVat: number) => {

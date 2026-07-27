@@ -199,47 +199,42 @@ const Reports: React.FC<ReportsProps> = ({ orders, onStartNewDay }) => {
       document.getElementById('print-section')?.remove();
       document.getElementById('print-section-style')?.remove();
 
+      const root = document.getElementById('root');
+      const originalRootDisplay = root?.style.display || '';
+      if (root) root.style.display = 'none';
+
+      const bodyChildren = Array.from(document.body.children) as HTMLElement[];
+      const originalDisplays = bodyChildren.map(el => el.style.display);
+      bodyChildren.forEach(el => { el.style.display = 'none'; });
+
+      const printSection = document.createElement('div');
+      printSection.id = 'print-section';
+      printSection.style.cssText = 'position:absolute;left:0;top:0;width:100%;margin:0;padding:0;background:white;z-index:999999;';
+      printSection.innerHTML = htmlContent;
+      document.body.appendChild(printSection);
+
       const printStyle = document.createElement('style');
       printStyle.id = 'print-section-style';
       printStyle.innerHTML = `
         @media print {
-          body > *:not(#print-section) {
-            display: none !important;
-          }
-          #print-section, #print-section * {
-            display: block !important;
-            visibility: visible !important;
-          }
-          #print-section style, #print-section script {
-            display: none !important;
-          }
-          #print-section {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-            background: white !important;
-          }
+          body { margin: 0 !important; padding: 0 !important; background: white !important; }
+          #print-section style, #print-section script { display: none !important; }
         }
+        #print-section style, #print-section script { display: none !important; }
       `;
       document.head.appendChild(printStyle);
-
-      const printSection = document.createElement('div');
-      printSection.id = 'print-section';
-      printSection.innerHTML = htmlContent;
-      document.body.appendChild(printSection);
 
       setTimeout(() => {
         window.focus();
         window.print();
-        
+
         setTimeout(() => {
           printSection.remove();
           printStyle.remove();
-        }, 1000);
-      }, 150);
+          bodyChildren.forEach((el, i) => { el.style.display = originalDisplays[i]; });
+          if (root) root.style.display = originalRootDisplay;
+        }, 500);
+      }, 200);
     };
 
     const html = `
