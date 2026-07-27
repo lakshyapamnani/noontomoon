@@ -195,106 +195,128 @@ const Reports: React.FC<ReportsProps> = ({ orders, onStartNewDay }) => {
       return;
     }
 
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      document.body.removeChild(iframe);
-      return;
-    }
+    const printHtmlContent = (htmlContent: string) => {
+      document.getElementById('print-section')?.remove();
+      document.getElementById('print-section-style')?.remove();
+
+      const printStyle = document.createElement('style');
+      printStyle.id = 'print-section-style';
+      printStyle.innerHTML = `
+        @media print {
+          body > *:not(#print-section) {
+            display: none !important;
+          }
+          #print-section, #print-section * {
+            display: block !important;
+            visibility: visible !important;
+          }
+          #print-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: white !important;
+          }
+        }
+      `;
+      document.head.appendChild(printStyle);
+
+      const printSection = document.createElement('div');
+      printSection.id = 'print-section';
+      printSection.innerHTML = htmlContent;
+      document.body.appendChild(printSection);
+
+      setTimeout(() => {
+        window.focus();
+        window.print();
+        
+        setTimeout(() => {
+          printSection.remove();
+          printStyle.remove();
+        }, 1000);
+      }, 150);
+    };
 
     const html = `
-      <html>
-        <head>
-          <title>DRONA POS - Sales Report</title>
-          <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #000; font-weight: bold; }
-            .header { text-align: center; border-bottom: 2px solid #F57C00; padding-bottom: 20px; margin-bottom: 30px; }
-            h1 { color: #F57C00; margin: 0; font-size: 28px; }
-            .meta { font-size: 14px; color: #000; margin-top: 5px; }
-            .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }
-            .summary-card { padding: 20px; border: 1px solid #eee; border-radius: 10px; text-align: center; }
-            .summary-label { font-size: 12px; color: #000; text-transform: uppercase; font-weight: bold; }
-            .summary-value { font-size: 24px; color: #F57C00; font-weight: bold; margin-top: 10px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; color: #000; }
-            th { background-color: #fafafa; font-weight: bold; text-transform: uppercase; color: #000; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>DRONA POS - Sales Report</h1>
-            <div class="meta">Generated on: ${new Date().toLocaleString()}</div>
-            ${startDate || endDate ? `<div class="meta">Period: ${startDate || 'Start'} to ${endDate || 'End'}</div>` : ''}
+      <div class="print-container">
+        <style>
+          .print-container {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 40px;
+            color: #000;
+            font-weight: bold;
+            background-color: #fff;
+          }
+          .print-container .header { text-align: center; border-bottom: 2px solid #F57C00; padding-bottom: 20px; margin-bottom: 30px; }
+          .print-container h1 { color: #F57C00; margin: 0; font-size: 28px; }
+          .print-container .meta { font-size: 14px; color: #000; margin-top: 5px; }
+          .print-container .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }
+          .print-container .summary-card { padding: 20px; border: 1px solid #eee; border-radius: 10px; text-align: center; }
+          .print-container .summary-label { font-size: 12px; color: #000; text-transform: uppercase; font-weight: bold; }
+          .print-container .summary-value { font-size: 24px; color: #F57C00; font-weight: bold; margin-top: 10px; }
+          .print-container table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          .print-container th, .print-container td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; color: #000; }
+          .print-container th { background-color: #fafafa; font-weight: bold; text-transform: uppercase; color: #000; }
+        </style>
+        <div class="header">
+          <h1>DRONA POS - Sales Report</h1>
+          <div class="meta">Generated on: ${new Date().toLocaleString()}</div>
+          ${startDate || endDate ? `<div class="meta">Period: ${startDate || 'Start'} to ${endDate || 'End'}</div>` : ''}
+        </div>
+        
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Total Orders</div>
+            <div class="summary-value">${analytics.totalOrders}</div>
           </div>
-          
-          <div class="summary-grid">
-            <div class="summary-card">
-              <div class="summary-label">Total Orders</div>
-              <div class="summary-value">${analytics.totalOrders}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Total Sale</div>
-              <div class="summary-value">₹${analytics.totalSubtotal.toFixed(2)}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Total Revenue</div>
-              <div class="summary-value">₹${analytics.totalRevenue.toFixed(2)}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Total Tax</div>
-              <div class="summary-value">₹${analytics.totalTax.toFixed(2)}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Avg Order Value</div>
-              <div class="summary-value">₹${analytics.avgOrderValue.toFixed(2)}</div>
-            </div>
+          <div class="summary-card">
+            <div class="summary-label">Total Sale</div>
+            <div class="summary-value">₹${analytics.totalSubtotal.toFixed(2)}</div>
           </div>
+          <div class="summary-card">
+            <div class="summary-label">Total Revenue</div>
+            <div class="summary-value">₹${analytics.totalRevenue.toFixed(2)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Total Tax</div>
+            <div class="summary-value">₹${analytics.totalTax.toFixed(2)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Avg Order Value</div>
+            <div class="summary-value">₹${analytics.avgOrderValue.toFixed(2)}</div>
+          </div>
+        </div>
 
-          <table>
-            <thead>
+        <table>
+          <thead>
+            <tr>
+              <th>Bill No</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th>Payment</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredOrders.map(o => `
               <tr>
-                <th>Bill No</th>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Items</th>
-                <th>Payment</th>
-                <th>Total</th>
+                <td>${o.billNo}</td>
+                <td>${o.date} ${o.time}</td>
+                <td>${o.customerName || '-'}</td>
+                <td>${o.items.length} items</td>
+                <td>${o.paymentMode}</td>
+                <td>₹${o.total.toFixed(2)}</td>
               </tr>
-            </thead>
-            <tbody>
-              ${filteredOrders.map(o => `
-                <tr>
-                  <td>${o.billNo}</td>
-                  <td>${o.date} ${o.time}</td>
-                  <td>${o.customerName || '-'}</td>
-                  <td>${o.items.length} items</td>
-                  <td>${o.paymentMode}</td>
-                  <td>₹${o.total.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </body>
-      </html>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     `;
 
-    iframeDoc.write(html);
-    iframeDoc.close();
-
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (err) {
-        console.error("Print error:", err);
-      }
-      setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      }, 1000);
-    }, 150);
+    printHtmlContent(html);
   };
 
   // Chart colors

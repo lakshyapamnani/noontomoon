@@ -128,214 +128,289 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
     const vatAmt = Math.round(taxInfo.vat);
 
 
-    // iframe print
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      document.body.removeChild(iframe);
-      return;
-    }
+    const printHtmlContent = (htmlContent: string) => {
+      document.getElementById('print-section')?.remove();
+      document.getElementById('print-section-style')?.remove();
+
+      const printStyle = document.createElement('style');
+      printStyle.id = 'print-section-style';
+      printStyle.innerHTML = `
+        @media print {
+          body > *:not(#print-section) {
+            display: none !important;
+          }
+          #print-section, #print-section * {
+            display: block !important;
+            visibility: visible !important;
+          }
+          #print-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: white !important;
+          }
+        }
+      `;
+      document.head.appendChild(printStyle);
+
+      const printSection = document.createElement('div');
+      printSection.id = 'print-section';
+      printSection.innerHTML = htmlContent;
+      document.body.appendChild(printSection);
+
+      setTimeout(() => {
+        window.focus();
+        window.print();
+        
+        setTimeout(() => {
+          printSection.remove();
+          printStyle.remove();
+        }, 1000);
+      }, 150);
+    };
 
     const html = `
-      <html>
-        <head>
-          <style>
-            @page { size: 80mm auto; margin: 0; }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body { 
-              font-family: 'Arial Black', Arial, sans-serif; 
-              width: 76mm; 
-              max-width: 76mm;
-              margin: 0 auto; 
-              padding: 3mm; 
-              font-size: 14px; 
-              color: #000 !important; 
-              line-height: 1.3;
-              font-weight: 900;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: 900; }
-            .line { border-bottom: 2px dashed #000; margin: 8px 0; }
-            .header-name { font-size: 18px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
-            .item-row { display: flex; justify-content: space-between; margin: 4px 0; font-weight: 900; }
-            .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; font-weight: 900; }
-            .qty { width: 25px; text-align: center; font-weight: 900; }
-            .price { width: 45px; text-align: right; font-weight: 900; }
-            .footer { margin-top: 15px; font-size: 12px; font-weight: 900; }
-            .total-section { font-size: 16px; margin-top: 5px; font-weight: 900; }
-          </style>
-        </head>
-        <body>
-          <div class="center header-name">${restaurantInfo.name}</div>
-          <div class="center">${restaurantInfo.address}</div>
-          <div class="center">Tel: ${restaurantInfo.phone}</div>
-          <div class="line"></div>
-          <div class="center bold">DUPLICATE BILL</div>
-          <div class="line"></div>
-          <div>Bill: ${order.billNo}</div>
-          ${order.tableName ? `<div>Table: ${order.tableName}</div>` : ''}
-          ${order.customerName ? `<div>Cust: ${order.customerName}</div>` : ''}
-          <div>Date: ${order.date}</div>
-          <div>Time: ${order.time}</div>
-          <div>Type: ${order.orderType}</div>
-          <div class="line"></div>
-          <div class="bold item-row">
-            <span class="item-name">Item</span>
-            <span class="qty">Qty</span>
-            <span class="price">Amt</span>
+      <div class="print-container">
+        <style>
+          .print-container {
+            font-family: 'Arial Black', Arial, sans-serif; 
+            width: 76mm; 
+            max-width: 76mm;
+            margin: 0 auto; 
+            padding: 3mm; 
+            font-size: 14px; 
+            color: #000; 
+            line-height: 1.3;
+            font-weight: 950;
+            background-color: #fff;
+          }
+          .print-container .center { text-align: center; }
+          .print-container .bold { font-weight: 950; }
+          .print-container .line { border-bottom: 2px dashed #000; margin: 8px 0; }
+          .print-container .header-name { font-size: 18px; font-weight: 950; margin-bottom: 2px; text-transform: uppercase; }
+          .print-container .item-row { display: flex; justify-content: space-between; margin: 4px 0; font-weight: 950; }
+          .print-container .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 5px; font-weight: 950; }
+          .print-container .qty { width: 25px; text-align: center; font-weight: 950; }
+          .print-container .price { width: 45px; text-align: right; font-weight: 950; }
+          .print-container .footer { margin-top: 15px; font-size: 12px; font-weight: 950; }
+          .print-container .total-section { font-size: 16px; margin-top: 5px; font-weight: 950; }
+        </style>
+        <div class="center header-name">${restaurantInfo.name}</div>
+        <div class="center">${restaurantInfo.address}</div>
+        <div class="center">Tel: ${restaurantInfo.phone}</div>
+        <div class="line"></div>
+        <div class="center bold">DUPLICATE BILL</div>
+        <div class="line"></div>
+        <div>Bill: ${order.billNo}</div>
+        ${order.tableName ? `<div>Table: ${order.tableName}</div>` : ''}
+        ${order.customerName ? `<div>Cust: ${order.customerName}</div>` : ''}
+        <div>Date: ${order.date}</div>
+        <div>Time: ${order.time}</div>
+        <div>Type: ${order.orderType}</div>
+        <div class="line"></div>
+        <div class="bold item-row">
+          <span class="item-name">Item</span>
+          <span class="qty">Qty</span>
+          <span class="price">Amt</span>
+        </div>
+        ${order.items.map(it => `
+          <div class="item-row">
+            <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
+            <span class="qty">${it.quantity}</span>
+            <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
           </div>
-          ${order.items.map(it => `
-            <div class="item-row">
-              <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (Half)' : it.selectedPortion === 'FULL' ? ' (Full)' : ''}</span>
-              <span class="qty">${it.quantity}</span>
-              <span class="price">${(it.price * it.quantity).toFixed(0)}</span>
-            </div>
-          `).join('')}
-          <div class="line"></div>
-          <div class="item-row"><span>Subtotal:</span><span>₹${order.subtotal.toFixed(0)}</span></div>
-          <div class="item-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>₹${gstAmt.toFixed(0)}</span></div>
-          <div class="item-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>₹${vatAmt.toFixed(0)}</span></div>
-          <div class="item-row"><span>Tax Total:</span><span>₹${(gstAmt + vatAmt).toFixed(0)}</span></div>
-          ${order.discountAmount && order.discountAmount > 0 ? `<div class="item-row"><span>Discount (${order.discountPercent || 0}%):</span><span>-₹${order.discountAmount.toFixed(0)}</span></div>` : ''}
-          <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${order.total.toFixed(0)}</span></div>
-          <div class="line"></div>
-          <div class="center">Paid via ${order.paymentMode}</div>
-          <div class="footer center">
-            <p>Thank you!</p>
-            <p>Visit again.</p>
-          </div>
-        </body>
-      </html>
+        `).join('')}
+        <div class="line"></div>
+        <div class="item-row"><span>Subtotal:</span><span>₹${order.subtotal.toFixed(0)}</span></div>
+        <div class="item-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>₹${gstAmt.toFixed(0)}</span></div>
+        <div class="item-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>₹${vatAmt.toFixed(0)}</span></div>
+        <div class="item-row"><span>Tax Total:</span><span>₹${(gstAmt + vatAmt).toFixed(0)}</span></div>
+        ${order.discountAmount && order.discountAmount > 0 ? `<div class="item-row"><span>Discount (${order.discountPercent || 0}%):</span><span>-₹${order.discountAmount.toFixed(0)}</span></div>` : ''}
+        <div class="item-row bold total-section"><span>TOTAL:</span><span>₹${order.total.toFixed(0)}</span></div>
+        <div class="line"></div>
+        <div class="center">Paid via ${order.paymentMode}</div>
+        <div class="footer center">
+          <p>Thank you!</p>
+          <p>Visit again.</p>
+        </div>
+      </div>
     `;
-    iframeDoc.write(html);
-    iframeDoc.close();
 
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (err) {
-        console.error("Print error:", err);
-      }
-      setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      }, 1000);
-    }, 150);
+    printHtmlContent(html);
   };
 
   const exportToPDF = (data: Order[], subTitle: string) => {
     if (!data || data.length === 0) return;
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      document.body.removeChild(iframe);
-      return;
-    }
+    const printHtmlContent = (htmlContent: string) => {
+      document.getElementById('print-section')?.remove();
+      document.getElementById('print-section-style')?.remove();
+
+      const printStyle = document.createElement('style');
+      printStyle.id = 'print-section-style';
+      printStyle.innerHTML = `
+        @media print {
+          body > *:not(#print-section) {
+            display: none !important;
+          }
+          #print-section, #print-section * {
+            display: block !important;
+            visibility: visible !important;
+          }
+          #print-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: white !important;
+          }
+        }
+      `;
+      document.head.appendChild(printStyle);
+
+      const printSection = document.createElement('div');
+      printSection.id = 'print-section';
+      printSection.innerHTML = htmlContent;
+      document.body.appendChild(printSection);
+
+      setTimeout(() => {
+        window.focus();
+        window.print();
+        
+        setTimeout(() => {
+          printSection.remove();
+          printStyle.remove();
+        }, 1000);
+      }, 150);
+    };
 
     const pdfTotalSale = data.reduce((sum, o) => sum + (o.subtotal || 0), 0);
     const pdfTotalRevenue = data.reduce((sum, o) => sum + (o.total || 0), 0);
 
     const html = `
-      <html>
-        <head>
-          <title>${title} - ${subTitle}</title>
-          <style>
-            body { font-family: sans-serif; padding: 20px; }
-            h1 { color: #F57C00; margin-bottom: 5px; }
-            h2 { color: #333; margin-top: 0; font-size: 18px; }
-            .summary { display: flex; gap: 30px; margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 8px; }
-            .summary-item { text-align: center; }
-            .summary-label { font-size: 11px; color: #666; text-transform: uppercase; font-weight: bold; }
-            .summary-value { font-size: 20px; font-weight: bold; color: #F57C00; }
-            .summary-value.green { color: #16a34a; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 11px; }
-            th { background-color: #f2f2f2; }
-          </style>
-        </head>
-        <body>
-          <h1>DRONA POS</h1>
-          <h2>${title} (${subTitle})</h2>
-          <p>Generated: ${new Date().toLocaleString()}</p>
-          <div class="summary">
-            <div class="summary-item">
-              <div class="summary-label">Total Orders</div>
-              <div class="summary-value">${data.length}</div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-label">Total Sale</div>
-              <div class="summary-value green">₹${pdfTotalSale.toFixed(2)}</div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-label">Total Revenue</div>
-              <div class="summary-value">₹${pdfTotalRevenue.toFixed(2)}</div>
-            </div>
+      <div class="print-container">
+        <style>
+          .print-container {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 40px;
+            color: #000;
+            font-weight: bold;
+            background-color: #fff;
+          }
+          .print-container .header { text-align: center; border-bottom: 2px solid #F57C00; padding-bottom: 20px; margin-bottom: 30px; }
+          .print-container h1 { color: #F57C00; margin: 0; font-size: 28px; }
+          .print-container .meta { font-size: 14px; color: #000; margin-top: 5px; }
+          .print-container .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 30px 0; }
+          .print-container .summary-card { padding: 20px; border: 1px solid #eee; border-radius: 10px; text-align: center; }
+          .print-container .summary-label { font-size: 12px; color: #000; text-transform: uppercase; font-weight: bold; }
+          .print-container .summary-value { font-size: 24px; color: #F57C00; font-weight: bold; margin-top: 10px; }
+          .print-container table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          .print-container th, .print-container td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; color: #000; }
+          .print-container th { background-color: #fafafa; font-weight: bold; text-transform: uppercase; color: #000; }
+        </style>
+        <div class="header">
+          <h1>DRONA POS - Sales Report</h1>
+          <div class="meta">Generated on: ${new Date().toLocaleString()}</div>
+          <div class="meta">Filter: ${subTitle}</div>
+        </div>
+        
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Total Orders</div>
+            <div class="summary-value">${data.length}</div>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Bill No</th>
-                <th>Customer</th>
-                <th>Time</th>
-                <th>Items</th>
-                <th>Type</th>
-                <th>Payment</th>
-                <th>Total</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${data.map(o => `
-                <tr>
-                  <td>${o.billNo}</td>
-                  <td>${o.customerName || '-'}</td>
-                  <td>${o.time}</td>
-                  <td>${(o.items || []).map(i => formatItemDisplay(i)).join(', ')}</td>
-                  <td>${o.orderType}</td>
-                  <td>₹${(o.total || 0).toFixed(2)}</td>
-                  <td>${o.status}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `;
-    iframeDoc.write(html);
-    iframeDoc.close();
+          <div class="summary-card">
+            <div class="summary-label">Total Sale</div>
+            <div class="summary-value">₹${pdfTotalSale.toFixed(2)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Total Revenue</div>
+            <div class="summary-value">₹${pdfTotalRevenue.toFixed(2)}</div>
+          </div>
+        </div>
 
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (err) {
-        console.error("Print error:", err);
-      }
-      setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      }, 1000);
-    }, 150);
+        <table>
+          <thead>
+            <tr>
+              <th>Bill No</th>
+              <th>Customer</th>
+              <th>Time</th>
+              <th>Items</th>
+              <th>Type</th>
+              <th>Payment</th>
+              <th>Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.map(o => `
+              <tr>
+                <td>${o.billNo}</td>
+                <td>${o.customerName || '-'}</td>
+                <td>${o.time}</td>
+                <td>${(o.items || []).map(i => formatItemDisplay(i)).join(', ')}</td>
+                <td>${o.orderType}</td>
+                <td>₹${(o.total || 0).toFixed(2)}</td>
+                <td>${o.status}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    printHtmlContent(html);
   };
 
   const exportKOTSummary = (data: Order[], subTitle: string, categoryFilter: 'all' | string) => {
     if (!data || data.length === 0) return;
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      document.body.removeChild(iframe);
-      return;
-    }
+    const printHtmlContent = (htmlContent: string) => {
+      document.getElementById('print-section')?.remove();
+      document.getElementById('print-section-style')?.remove();
+
+      const printStyle = document.createElement('style');
+      printStyle.id = 'print-section-style';
+      printStyle.innerHTML = `
+        @media print {
+          body > *:not(#print-section) {
+            display: none !important;
+          }
+          #print-section, #print-section * {
+            display: block !important;
+            visibility: visible !important;
+          }
+          #print-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: white !important;
+          }
+        }
+      `;
+      document.head.appendChild(printStyle);
+
+      const printSection = document.createElement('div');
+      printSection.id = 'print-section';
+      printSection.innerHTML = htmlContent;
+      document.body.appendChild(printSection);
+
+      setTimeout(() => {
+        window.focus();
+        window.print();
+        
+        setTimeout(() => {
+          printSection.remove();
+          printStyle.remove();
+        }, 1000);
+      }, 150);
+    };
 
     const categoryMap: Record<string, { name: string; items: Record<string, { name: string; qty: number; total: number }> }> = {};
 
@@ -357,34 +432,26 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
         // Include ml details and portion labels in the aggregated KOT summary display name and key
         const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
         const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
-        const displayName = `${it.name}${details ? ` (${details})` : ''}`;
+        const itemKey = `${it.name}_${details}`;
+        const itemDisplayName = `${it.name}${details ? ` (${details})` : ''}`;
 
-        const key = displayName;
-        if (!categoryMap[catId].items[key]) {
-          categoryMap[catId].items[key] = { name: displayName, qty: 0, total: 0 };
+        if (!categoryMap[catId].items[itemKey]) {
+          categoryMap[catId].items[itemKey] = { name: itemDisplayName, qty: 0, total: 0 };
         }
-        categoryMap[catId].items[key].qty += it.quantity;
-        categoryMap[catId].items[key].total += (it.price || 0) * it.quantity;
+        categoryMap[catId].items[itemKey].qty += it.quantity;
+        categoryMap[catId].items[itemKey].total += it.price * it.quantity;
       });
     });
 
-    const filterLabel =
-      categoryFilter === 'all'
-        ? 'ALL CATEGORIES'
-        : (categoryNameById[categoryFilter] || 'CATEGORY').toUpperCase();
+    const filterLabel = categoryFilter === 'all' ? 'All Categories' : (categoryNameById[categoryFilter] || 'Selected Category');
 
-    const orderedSections: { id: string; data: { name: string; items: Record<string, { name: string; qty: number; total: number }> } }[] = [];
-    const seen = new Set<string>();
+    // Create sorted list of categories to print
+    const orderedSections: { id: string; data: typeof categoryMap[string] }[] = [];
     if (categoryFilter === 'all') {
-      for (const cat of categories) {
-        if (categoryMap[cat.id]) {
-          orderedSections.push({ id: cat.id, data: categoryMap[cat.id] });
-          seen.add(cat.id);
-        }
-      }
-      for (const id of Object.keys(categoryMap)) {
-        if (!seen.has(id)) orderedSections.push({ id, data: categoryMap[id] });
-      }
+      const sortedCatIds = Object.keys(categoryMap).sort((a, b) => categoryMap[a].name.localeCompare(categoryMap[b].name));
+      sortedCatIds.forEach(id => {
+        orderedSections.push({ id, data: categoryMap[id] });
+      });
     } else if (categoryMap[categoryFilter]) {
       orderedSections.push({ id: categoryFilter, data: categoryMap[categoryFilter] });
     }
@@ -441,93 +508,73 @@ const OrdersList: React.FC<OrdersListProps> = ({ title, orders, lastNewDayAt = n
     });
 
     const html = `
-      <html>
-        <head>
-          <title>KOT Summary - ${subTitle}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0; }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-              font-family: Arial, sans-serif;
-              width: 76mm;
-              max-width: 76mm;
-              margin: 0 auto;
-              padding: 3mm;
-              font-size: 11px;
-              color: #000;
-              line-height: 1.3;
-              font-weight: bold;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .line { border-bottom: 2px dashed #000; margin: 6px 0; }
-            .header-name { font-size: 11px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
-            .sub { font-size: 9px; }
-            .cat-title { font-size: 10px; font-weight: bold; margin-top: 6px; }
-            .row { display: flex; justify-content: space-between; gap: 4px; margin: 2px 0; align-items: baseline; }
-            .name { flex: 1; min-width: 0; word-break: break-word; }
-            .qty { width: 22px; text-align: right; font-weight: bold; flex-shrink: 0; }
-            .amt { width: 36px; text-align: right; flex-shrink: 0; }
-            .grand-total { font-size: 12px; font-weight: bold; margin-top: 4px; }
-          </style>
-        </head>
-        <body>
-          <div class="center header-name">${restaurantInfo.name}</div>
-          <div class="center sub">${restaurantInfo.address}</div>
-          <div class="line"></div>
-          <div class="center bold">KOT SUMMARY</div>
-          <div class="center sub">${subTitle} · ${filterLabel}</div>
-          <div class="center sub">${new Date().toLocaleString()}</div>
-          <div class="line"></div>
-          ${sectionHtml || '<div class="center sub">No items</div>'}
-          <div class="line"></div>
-          <div class="row grand-total">
-            <span class="name">GRAND TOTAL (Items)</span>
-            <span class="qty"></span>
-            <span class="amt">₹${grandTotal.toFixed(0)}</span>
-          </div>
-          <div class="row">
-            <span class="name">GST Total</span>
-            <span class="qty"></span>
-            <span class="amt">₹${totalGst.toFixed(0)}</span>
-          </div>
-          <div class="row">
-            <span class="name">VAT Total</span>
-            <span class="qty"></span>
-            <span class="amt">₹${totalVat.toFixed(0)}</span>
-          </div>
-          <div class="row">
-            <span class="name">Tax Total</span>
-            <span class="qty"></span>
-            <span class="amt">₹${(totalGst + totalVat).toFixed(0)}</span>
-          </div>
-          ${totalDiscounts > 0 ? `<div class="row"><span class="name">Discounts</span><span class="qty"></span><span class="amt">-₹${totalDiscounts.toFixed(0)}</span></div>` : ''}
-          <div class="row grand-total">
-            <span class="name">TOTAL COLLECTED</span>
-            <span class="qty"></span>
-            <span class="amt">₹${totalCollected.toFixed(0)}</span>
-          </div>
-          <div class="line"></div>
-          <div class="center sub" style="margin-top:6px;">End of summary</div>
-        </body>
-      </html>
+      <div class="print-container">
+        <style>
+          .print-container {
+            font-family: Arial, sans-serif;
+            width: 76mm;
+            max-width: 76mm;
+            margin: 0 auto;
+            padding: 3mm;
+            font-size: 11px;
+            color: #000;
+            line-height: 1.3;
+            font-weight: bold;
+            background-color: #fff;
+          }
+          .print-container .center { text-align: center; }
+          .print-container .bold { font-weight: bold; }
+          .print-container .line { border-bottom: 2px dashed #000; margin: 6px 0; }
+          .print-container .header-name { font-size: 11px; font-weight: bold; margin-bottom: 2px; text-transform: uppercase; }
+          .print-container .sub { font-size: 9px; }
+          .print-container .cat-title { font-size: 10px; font-weight: bold; margin-top: 6px; }
+          .print-container .row { display: flex; justify-content: space-between; gap: 4px; margin: 2px 0; align-items: baseline; }
+          .print-container .name { flex: 1; min-width: 0; word-break: break-word; }
+          .print-container .qty { width: 22px; text-align: right; font-weight: bold; flex-shrink: 0; }
+          .print-container .amt { width: 36px; text-align: right; flex-shrink: 0; }
+          .print-container .grand-total { font-size: 12px; font-weight: bold; margin-top: 4px; }
+        </style>
+        <div class="center header-name">${restaurantInfo.name}</div>
+        <div class="center sub">${restaurantInfo.address}</div>
+        <div class="line"></div>
+        <div class="center bold">KOT SUMMARY</div>
+        <div class="center sub">${subTitle} · ${filterLabel}</div>
+        <div class="center sub">${new Date().toLocaleString()}</div>
+        <div class="line"></div>
+        ${sectionHtml || '<div class="center sub">No items</div>'}
+        <div class="line"></div>
+        <div class="row grand-total">
+          <span class="name">GRAND TOTAL (Items)</span>
+          <span class="qty"></span>
+          <span class="amt">₹${grandTotal.toFixed(0)}</span>
+        </div>
+        <div class="row">
+          <span class="name">GST Total</span>
+          <span class="qty"></span>
+          <span class="amt">₹${totalGst.toFixed(0)}</span>
+        </div>
+        <div class="row">
+          <span class="name">VAT Total</span>
+          <span class="qty"></span>
+          <span class="amt">₹${totalVat.toFixed(0)}</span>
+        </div>
+        <div class="row">
+          <span class="name">Tax Total</span>
+          <span class="qty"></span>
+          <span class="amt">₹${(totalGst + totalVat).toFixed(0)}</span>
+        </div>
+        ${totalDiscounts > 0 ? `<div class="row"><span class="name">Discounts</span><span class="qty"></span><span class="amt">-₹${totalDiscounts.toFixed(0)}</span></div>` : ''}
+        <div class="row grand-total">
+          <span class="name">TOTAL COLLECTED</span>
+          <span class="qty"></span>
+          <span class="amt">₹${totalCollected.toFixed(0)}</span>
+        </div>
+        <div class="line"></div>
+        <div class="center sub" style="margin-top:6px;">End of summary</div>
+      </div>
     `;
-    iframeDoc.write(html);
-    iframeDoc.close();
 
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (err) {
-        console.error("Print error:", err);
-      }
-      setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      }, 1000);
-    }, 150);
+    printHtmlContent(html);
   };
 
   const renderTable = (data: Order[], emptyMessage: string = "No orders found.") => (

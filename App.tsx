@@ -1118,171 +1118,182 @@ const App: React.FC = () => {
     const discountAmount = totals.discountAmount;
     const total = totals.total;
 
-    // iframe print
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
+    const printHtmlContent = (htmlContent: string) => {
+      document.getElementById('print-section')?.remove();
+      document.getElementById('print-section-style')?.remove();
 
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      alert('Unable to create print frame.');
-      document.body.removeChild(iframe);
-      return;
-    }
+      const printStyle = document.createElement('style');
+      printStyle.id = 'print-section-style';
+      printStyle.innerHTML = `
+        @media print {
+          body > *:not(#print-section) {
+            display: none !important;
+          }
+          #print-section, #print-section * {
+            display: block !important;
+            visibility: visible !important;
+          }
+          #print-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: white !important;
+          }
+        }
+      `;
+      document.head.appendChild(printStyle);
+
+      const printSection = document.createElement('div');
+      printSection.id = 'print-section';
+      printSection.innerHTML = htmlContent;
+      document.body.appendChild(printSection);
+
+      setTimeout(() => {
+        window.focus();
+        window.print();
+        
+        setTimeout(() => {
+          printSection.remove();
+          printStyle.remove();
+        }, 1000);
+      }, 150);
+    };
 
     const html = `
-      <html>
-        <head>
-          <title>Receipt - ${tableName}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0; }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-              font-family: 'Arial Black', Arial, sans-serif;
-              width: 76mm;
-              max-width: 76mm;
-              margin: 0 auto;
-              padding: 3mm;
-              font-size: 11px;
-              color: #000 !important;
-              line-height: 1.4;
-              font-weight: 900;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: 900; }
-            .line { border-bottom: 2px dashed #000; margin: 6px 0; }
-            .header-name { font-size: 14px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
-            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 900; }
-            .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 900; }
-            .qty { width: 24px; text-align: center; font-weight: 900; flex-shrink: 0; }
-            .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 900; }
-            .tax-row { font-family: Arial, sans-serif; font-weight: normal; font-size: 9px; }
-            .total-section { font-size: 13px; font-weight: 900; margin-top: 4px; }
-            .footer { font-size: 9px; margin-top: 8px; font-weight: 900; }
-          </style>
-        </head>
-        <body>
-          <div class="center header-name">${restaurantInfo.name}</div>
-          <div class="center">${restaurantInfo.address}</div>
-          <div class="center">Tel: ${restaurantInfo.phone}</div>
-          <div class="line"></div>
-          <div class="center bold" style="font-size: 16px; margin: 5px 0;">TAX INVOICE</div>
-          <div class="line"></div>
-          <div>Invoice No: INV-${billCounter + 1}</div>
-          <div>Table: ${tableName}</div>
-          ${customerName && customerName !== 'Guest' ? `<div>Cust: ${customerName}</div>` : ''}
-          <div>Date: ${new Date().toLocaleDateString()}</div>
-          <div>Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-          <div>Type: DINE IN</div>
-          <div class="line"></div>
-          
-          <!-- Food Items Section -->
-          ${(() => {
-            const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
-            const isDrinkCat = (catId: string) => {
-              const cat = categories.find(c => String(c.id) === String(catId));
-              return cat ? (cat.type === 'DRINK' || (!cat.type && drinkNamePattern.test(cat.name || ''))) : false;
-            };
-            const foodItems = items.filter(it => !isDrinkCat(it.categoryId));
-            if (foodItems.length === 0) return '';
-            const foodSub = foodItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-            return `
-              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- FOOD ITEMS ---</div>
-              <div class="row bold">
-                <span class="item-name">Item</span>
-                <span class="qty">Qty</span>
-                <span class="amt">Amt</span>
-              </div>
-              ${foodItems.map(it => `
-                <div class="row">
-                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
-                  <span class="qty">${it.quantity}</span>
-                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-                </div>
-              `).join('')}
-              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
-                <span>FOOD TOTAL:</span>
-                <span>Rs ${foodSub.toFixed(0)}</span>
-              </div>
-              <div style="height: 8px;"></div>
-            `;
-          })()}
-
-          <!-- Drink Items Section -->
-          ${(() => {
-            const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
-            const isDrinkCat = (catId: string) => {
-              const cat = categories.find(c => String(c.id) === String(catId));
-              return cat ? (cat.type === 'DRINK' || (!cat.type && drinkNamePattern.test(cat.name || ''))) : false;
-            };
-            const drinkItems = items.filter(it => isDrinkCat(it.categoryId));
-            if (drinkItems.length === 0) return '';
-            const drinkSub = drinkItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-            return `
-              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- DRINK ITEMS ---</div>
-              <div class="row bold">
-                <span class="item-name">Item</span>
-                <span class="qty">Qty</span>
-                <span class="amt">Amt</span>
-              </div>
-              ${drinkItems.map(it => `
-                <div class="row">
-                  <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
-                  <span class="qty">${it.quantity}</span>
-                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-                </div>
-              `).join('')}
-              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
-                <span>DRINKS TOTAL:</span>
-                <span>Rs ${drinkSub.toFixed(0)}</span>
-              </div>
-              <div style="height: 8px;"></div>
-            `;
-          })()}
-
-          <div class="line"></div>
-          <div class="row"><span>Subtotal:</span><span>Rs ${subtotal.toFixed(0)}</span></div>
-          ${gstAmount > 0 ? `<div class="row tax-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${gstAmount.toFixed(0)}</span></div>` : ''}
-          ${vatAmount > 0 ? `<div class="row tax-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${vatAmount.toFixed(0)}</span></div>` : ''}
-          <div class="row tax-row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
-          ${discountAmount > 0 ? `
-            <div class="row">
-              <span>Discount (${discountPercent}%):</span>
-              <span>-Rs ${discountAmount.toFixed(0)}</span>
+      <div class="print-container">
+        <style>
+          .print-container {
+            font-family: 'Arial Black', Arial, sans-serif;
+            width: 76mm;
+            max-width: 76mm;
+            margin: 0 auto;
+            padding: 3mm;
+            font-size: 11px;
+            color: #000;
+            line-height: 1.4;
+            font-weight: 950;
+            background-color: #fff;
+          }
+          .print-container .center { text-align: center; }
+          .print-container .bold { font-weight: 950; }
+          .print-container .line { border-bottom: 2px dashed #000; margin: 6px 0; }
+          .print-container .header-name { font-size: 14px; font-weight: 950; margin-bottom: 2px; text-transform: uppercase; }
+          .print-container .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 950; }
+          .print-container .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 950; }
+          .print-container .qty { width: 24px; text-align: center; font-weight: 950; flex-shrink: 0; }
+          .print-container .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 950; }
+          .print-container .tax-row { font-family: Arial, sans-serif; font-weight: normal; font-size: 9px; }
+          .print-container .total-section { font-size: 13px; font-weight: 950; margin-top: 4px; }
+          .print-container .footer { font-size: 9px; margin-top: 8px; font-weight: 950; }
+        </style>
+        <div class="center header-name">${restaurantInfo.name}</div>
+        <div class="center">${restaurantInfo.address}</div>
+        <div class="center">Tel: ${restaurantInfo.phone}</div>
+        <div class="line"></div>
+        <div class="center bold" style="font-size: 16px; margin: 5px 0;">TAX INVOICE</div>
+        <div class="line"></div>
+        <div>Invoice No: INV-${billCounter + 1}</div>
+        <div>Table: ${tableName}</div>
+        ${customerName && customerName !== 'Guest' ? `<div>Cust: ${customerName}</div>` : ''}
+        <div>Date: ${new Date().toLocaleDateString()}</div>
+        <div>Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        <div>Type: DINE IN</div>
+        <div class="line"></div>
+        
+        <!-- Food Items Section -->
+        ${(() => {
+          const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+          const isDrinkCat = (catId: string) => {
+            const cat = categories.find(c => String(c.id) === String(catId));
+            return cat ? (cat.type === 'DRINK' || (!cat.type && drinkNamePattern.test(cat.name || ''))) : false;
+          };
+          const foodItems = items.filter(it => !isDrinkCat(it.categoryId));
+          if (foodItems.length === 0) return '';
+          const foodSub = foodItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+          return `
+            <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- FOOD ITEMS ---</div>
+            <div class="row bold">
+              <span class="item-name">Item</span>
+              <span class="qty">Qty</span>
+              <span class="amt">Amt</span>
             </div>
-          ` : ''}
-          <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${total.toFixed(0)}</span></div>
-          <div class="line"></div>
-          <div class="center bold">Not Paid Yet</div>
-          <div style="margin-top: 10px; font-size: 12px; font-weight: 900;">
-            ${restaurantInfo.gstNo && restaurantInfo.gstNo !== 'NOT SET' ? `<div>GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
-            ${restaurantInfo.vatNo && restaurantInfo.vatNo !== 'NOT SET' ? `<div>VAT NO: ${restaurantInfo.vatNo}</div>` : ''}
-            ${restaurantInfo.fssaiNo && restaurantInfo.fssaiNo !== 'NOT SET' ? `<div>FSSAI NO: ${restaurantInfo.fssaiNo}</div>` : ''}
-          </div>
-          </div>
-          <div class="footer center">
-            <p class="bold">Thank you!</p>
-            <p class="bold">Visit again.</p>
-          </div>
-        </body>
-      </html>
-    `;
-    iframeDoc.write(html);
-    iframeDoc.close();
+            ${foodItems.map(it => `
+              <div class="row">
+                <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                <span class="qty">${it.quantity}</span>
+                <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+              </div>
+            `).join('')}
+            <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+              <span>FOOD TOTAL:</span>
+              <span>Rs ${foodSub.toFixed(0)}</span>
+            </div>
+            <div style="height: 8px;"></div>
+          `;
+        })()}
 
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (err) {
-        console.error("Print error:", err);
-      }
-      setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      }, 1000);
-    }, 150);
+        <!-- Drink Items Section -->
+        ${(() => {
+          const drinkNamePattern = /drink|beverage|smoothie|juice|shake|coffee|tea|soda|cola|mocktail/i;
+          const isDrinkCat = (catId: string) => {
+            const cat = categories.find(c => String(c.id) === String(catId));
+            return cat ? (cat.type === 'DRINK' || (!cat.type && drinkNamePattern.test(cat.name || ''))) : false;
+          };
+          const drinkItems = items.filter(it => isDrinkCat(it.categoryId));
+          if (drinkItems.length === 0) return '';
+          const drinkSub = drinkItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+          return `
+            <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- DRINK ITEMS ---</div>
+            <div class="row bold">
+              <span class="item-name">Item</span>
+              <span class="qty">Qty</span>
+              <span class="amt">Amt</span>
+            </div>
+            ${drinkItems.map(it => `
+              <div class="row">
+                <span class="item-name">${it.name}${it.selectedPortion === 'HALF' ? ' (H)' : it.selectedPortion === 'FULL' ? ' (F)' : ''}</span>
+                <span class="qty">${it.quantity}</span>
+                <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+              </div>
+            `).join('')}
+            <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+              <span>DRINKS TOTAL:</span>
+              <span>Rs ${drinkSub.toFixed(0)}</span>
+            </div>
+            <div style="height: 8px;"></div>
+          `;
+        })()}
+
+        <div class="line"></div>
+        <div class="row"><span>Subtotal:</span><span>Rs ${subtotal.toFixed(0)}</span></div>
+        ${gstAmount > 0 ? `<div class="row tax-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${gstAmount.toFixed(0)}</span></div>` : ''}
+        ${vatAmount > 0 ? `<div class="row tax-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${vatAmount.toFixed(0)}</span></div>` : ''}
+        <div class="row tax-row"><span>Tax Total:</span><span>Rs ${taxAmount.toFixed(0)}</span></div>
+        ${discountAmount > 0 ? `
+          <div class="row">
+            <span>Discount (${discountPercent}%):</span>
+            <span>-Rs ${discountAmount.toFixed(0)}</span>
+          </div>
+        ` : ''}
+        <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${total.toFixed(0)}</span></div>
+        <div class="line"></div>
+        <div class="center bold">Not Paid Yet</div>
+        <div style="margin-top: 10px; font-size: 12px; font-weight: 900;">
+          ${restaurantInfo.gstNo && restaurantInfo.gstNo !== 'NOT SET' ? `<div>GSTIN: ${restaurantInfo.gstNo}</div>` : ''}
+          ${restaurantInfo.vatNo && restaurantInfo.vatNo !== 'NOT SET' ? `<div>VAT NO: ${restaurantInfo.vatNo}</div>` : ''}
+          ${restaurantInfo.fssaiNo && restaurantInfo.fssaiNo !== 'NOT SET' ? `<div>FSSAI NO: ${restaurantInfo.fssaiNo}</div>` : ''}
+        </div>
+        <div class="footer center">
+          <p class="bold">Thank you!</p>
+          <p class="bold">Visit again.</p>
+        </div>
+      </div>
+    `;
+
+    printHtmlContent(html);
   };
 
 

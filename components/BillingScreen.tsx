@@ -726,185 +726,187 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
     doIframeReceiptPrint(order, roundedGst, roundedVat);
   };
 
-  const doIframeReceiptPrint = (order: Order, orderGst: number, orderVat: number) => {
-    // Fallback: iframe print
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      alert('Unable to create print frame.');
-      document.body.removeChild(iframe);
-      return;
-    }
+  const printHtmlContent = (htmlContent: string) => {
+    document.getElementById('print-section')?.remove();
+    document.getElementById('print-section-style')?.remove();
 
-    const html = `
-      <html>
-        <head>
-          <title>Invoice</title>
-          <style>
-            @page { margin: 0; size: 80mm auto; }
-            @media print {
-              @page { margin: 0; }
-              body { margin: 0; }
-            }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-              font-family: 'Arial Black', Arial, sans-serif;
-              width: 76mm;
-              max-width: 76mm;
-              margin: 0 auto;
-              padding: 3mm;
-              font-size: 11px;
-              color: #000 !important;
-              line-height: 1.4;
-              font-weight: 900;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: 900; }
-            .line { border-bottom: 2px dashed #000; margin: 6px 0; }
-            .header-name { font-size: 14px; font-weight: 900; margin-bottom: 2px; text-transform: uppercase; }
-            .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 900; }
-            .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 900; }
-            .qty { width: 24px; text-align: center; font-weight: 900; flex-shrink: 0; }
-            .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 900; }
-            .tax-row { font-family: Arial, sans-serif; font-weight: normal; font-size: 9px; }
-            .total-section { font-size: 13px; font-weight: 900; margin-top: 4px; }
-            .footer { font-size: 9px; margin-top: 8px; font-weight: 900; }
-          </style>
-        </head>
-        <body>
-          <div class="center header-name">${restaurantInfo.name}</div>
-          <div class="center">${restaurantInfo.address}</div>
-          <div class="center">Tel: ${restaurantInfo.phone}</div>
-          <div class="line"></div>
-          <div class="center bold" style="font-size: 16px; margin: 5px 0;">TAX INVOICE</div>
-          <div class="line"></div>
-          <div>Invoice No: ${order.billNo}</div>
-          ${order.tableName ? '<div>Table: ' + order.tableName + '</div>' : ''}
-          ${order.customerName ? '<div>Cust: ' + order.customerName + '</div>' : ''}
-          <div>Date: ${order.date}</div>
-          <div>Time: ${order.time}</div>
-          <div>Type: ${order.orderType.replace('_', ' ')}</div>
-          <div class="line"></div>
-          
-          <!-- Food Items Section -->
-          ${(() => {
-            const foodItems = order.items.filter(it => {
-              const cat = categories.find(c => c.id === it.categoryId);
-              return cat?.type !== 'DRINK';
-            });
-            if (foodItems.length === 0) return '';
-            const foodSub = foodItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-            return `
-              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- FOOD ITEMS ---</div>
-              <div class="row bold">
-                <span class="item-name">Item</span>
-                <span class="qty">Qty</span>
-                <span class="amt">Amt</span>
-              </div>
-              ${foodItems.map(it => {
-                const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
-                const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
-                return `
-                  <div class="row">
-                    <span class="item-name">${it.name}${details ? ` (${details})` : ''}</span>
-                    <span class="qty">${it.quantity}</span>
-                    <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-                  </div>
-                `;
-              }).join('')}
-              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
-                <span>FOOD TOTAL:</span>
-                <span>Rs ${foodSub.toFixed(0)}</span>
-              </div>
-              <div style="height: 8px;"></div>
-            `;
-          })()}
-
-          <!-- Drink Items Section -->
-          ${(() => {
-            const drinkItems = order.items.filter(it => {
-              const cat = categories.find(c => c.id === it.categoryId);
-              return cat?.type === 'DRINK';
-            });
-            if (drinkItems.length === 0) return '';
-            const drinkSub = drinkItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
-            return `
-              <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- DRINK ITEMS ---</div>
-              <div class="row bold">
-                <span class="item-name">Item</span>
-                <span class="qty">Qty</span>
-                <span class="amt">Amt</span>
-              </div>
-              ${drinkItems.map(it => {
-                const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
-                const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
-                return `
-                  <div class="row">
-                    <span class="item-name">${it.name}${details ? ` (${details})` : ''}</span>
-                    <span class="qty">${it.quantity}</span>
-                    <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
-                  </div>
-                `;
-              }).join('')}
-              <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
-                <span>DRINKS TOTAL:</span>
-                <span>Rs ${drinkSub.toFixed(0)}</span>
-              </div>
-              <div style="height: 8px;"></div>
-            `;
-          })()}
-
-          <div class="line"></div>
-          <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
-          ${orderGst > 0 ? `<div class="row tax-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
-          ${orderVat > 0 ? `<div class="row tax-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
-          <div class="row tax-row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
-          ${order.discountAmount && order.discountAmount > 0 ? `
-            <div class="row" style="color: #000;">
-              <span>Discount (${order.discountPercent}%):</span>
-              <span>-Rs ${order.discountAmount.toFixed(0)}</span>
-            </div>
-          ` : ''}
-          <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
-          <div class="line"></div>
-          <div class="center bold">Paid via ${order.paymentMode}</div>
-          <div style="margin-top: 10px; font-size: 12px; font-weight: 900;">
-            ${restaurantInfo.gstNo && restaurantInfo.gstNo !== 'NOT SET' ? '<div>GSTIN: ' + restaurantInfo.gstNo + '</div>' : ''}
-            ${restaurantInfo.vatNo && restaurantInfo.vatNo !== 'NOT SET' ? '<div>VAT NO: ' + restaurantInfo.vatNo + '</div>' : ''}
-            ${restaurantInfo.fssaiNo && restaurantInfo.fssaiNo !== 'NOT SET' ? '<div>FSSAI NO: ' + restaurantInfo.fssaiNo + '</div>' : ''}
-          </div>
-          <div class="footer center">
-            <p class="bold">Thank you!</p>
-            <p class="bold">Visit again.</p>
-          </div>
-        </body>
-      </html>
+    const printStyle = document.createElement('style');
+    printStyle.id = 'print-section-style';
+    printStyle.innerHTML = `
+      @media print {
+        body > *:not(#print-section) {
+          display: none !important;
+        }
+        #print-section, #print-section * {
+          display: block !important;
+          visibility: visible !important;
+        }
+        #print-section {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          margin: 0;
+          padding: 0;
+          background: white !important;
+        }
+      }
     `;
+    document.head.appendChild(printStyle);
 
-    iframeDoc.write(html);
-    iframeDoc.close();
+    const printSection = document.createElement('div');
+    printSection.id = 'print-section';
+    printSection.innerHTML = htmlContent;
+    document.body.appendChild(printSection);
 
     setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (err) {
-        console.error("Print error:", err);
-      }
+      window.focus();
+      window.print();
+      
       setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        printSection.remove();
+        printStyle.remove();
       }, 1000);
     }, 150);
+  };
+
+  const doIframeReceiptPrint = (order: Order, orderGst: number, orderVat: number) => {
+    const html = `
+      <div class="print-container">
+        <style>
+          .print-container {
+            font-family: 'Arial Black', Arial, sans-serif;
+            width: 76mm;
+            max-width: 76mm;
+            margin: 0 auto;
+            padding: 3mm;
+            font-size: 11px;
+            color: #000;
+            line-height: 1.4;
+            font-weight: 950;
+            background-color: #fff;
+          }
+          .print-container .center { text-align: center; }
+          .print-container .bold { font-weight: 950; }
+          .print-container .line { border-bottom: 2px dashed #000; margin: 6px 0; }
+          .print-container .header-name { font-size: 14px; font-weight: 950; margin-bottom: 2px; text-transform: uppercase; }
+          .print-container .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 950; }
+          .print-container .item-name { flex: 1; min-width: 0; word-break: break-word; font-weight: 950; }
+          .print-container .qty { width: 24px; text-align: center; font-weight: 950; flex-shrink: 0; }
+          .print-container .amt { width: 45px; text-align: right; flex-shrink: 0; font-weight: 950; }
+          .print-container .tax-row { font-family: Arial, sans-serif; font-weight: normal; font-size: 9px; }
+          .print-container .total-section { font-size: 13px; font-weight: 950; margin-top: 4px; }
+          .print-container .footer { font-size: 9px; margin-top: 8px; font-weight: 950; }
+        </style>
+        <div class="center header-name">${restaurantInfo.name}</div>
+        <div class="center">${restaurantInfo.address}</div>
+        <div class="center">Tel: ${restaurantInfo.phone}</div>
+        <div class="line"></div>
+        <div class="center bold" style="font-size: 16px; margin: 5px 0;">TAX INVOICE</div>
+        <div class="line"></div>
+        <div>Invoice No: ${order.billNo}</div>
+        ${order.tableName ? '<div>Table: ' + order.tableName + '</div>' : ''}
+        ${order.customerName ? '<div>Cust: ' + order.customerName + '</div>' : ''}
+        <div>Date: ${order.date}</div>
+        <div>Time: ${order.time}</div>
+        <div>Type: ${order.orderType.replace('_', ' ')}</div>
+        <div class="line"></div>
+        
+        <!-- Food Items Section -->
+        ${(() => {
+          const foodItems = order.items.filter(it => {
+            const cat = categories.find(c => c.id === it.categoryId);
+            return cat?.type !== 'DRINK';
+          });
+          if (foodItems.length === 0) return '';
+          const foodSub = foodItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+          return `
+            <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- FOOD ITEMS ---</div>
+            <div class="row bold">
+              <span class="item-name">Item</span>
+              <span class="qty">Qty</span>
+              <span class="amt">Amt</span>
+            </div>
+            ${foodItems.map(it => {
+              const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
+              const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
+              return `
+                <div class="row">
+                  <span class="item-name">${it.name}${details ? ` (${details})` : ''}</span>
+                  <span class="qty">${it.quantity}</span>
+                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                </div>
+              `;
+            }).join('')}
+            <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+              <span>FOOD TOTAL:</span>
+              <span>Rs ${foodSub.toFixed(0)}</span>
+            </div>
+            <div style="height: 8px;"></div>
+          `;
+        })()}
+
+        <!-- Drink Items Section -->
+        ${(() => {
+          const drinkItems = order.items.filter(it => {
+            const cat = categories.find(c => c.id === it.categoryId);
+            return cat?.type === 'DRINK';
+          });
+          if (drinkItems.length === 0) return '';
+          const drinkSub = drinkItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+          return `
+            <div class="center bold" style="font-size: 12px; margin-top: 4px;">--- DRINK ITEMS ---</div>
+            <div class="row bold">
+              <span class="item-name">Item</span>
+              <span class="qty">Qty</span>
+              <span class="amt">Amt</span>
+            </div>
+            ${drinkItems.map(it => {
+              const portionLabel = it.selectedPortion === 'HALF' ? 'H' : it.selectedPortion === 'FULL' ? 'F' : '';
+              const details = [it.selectedMl, portionLabel].filter(Boolean).join(' | ');
+              return `
+                <div class="row">
+                  <span class="item-name">${it.name}${details ? ` (${details})` : ''}</span>
+                  <span class="qty">${it.quantity}</span>
+                  <span class="amt">${(it.price * it.quantity).toFixed(0)}</span>
+                </div>
+              `;
+            }).join('')}
+            <div class="row bold" style="border-top: 1px solid #000; margin-top: 4px;">
+              <span>DRINKS TOTAL:</span>
+              <span>Rs ${drinkSub.toFixed(0)}</span>
+            </div>
+            <div style="height: 8px;"></div>
+          `;
+        })()}
+
+        <div class="line"></div>
+        <div class="row"><span>Subtotal:</span><span>Rs ${order.subtotal.toFixed(0)}</span></div>
+        ${orderGst > 0 ? `<div class="row tax-row"><span>GST (${(taxRate * 100).toFixed(0)}%):</span><span>Rs ${orderGst.toFixed(0)}</span></div>` : ''}
+        ${orderVat > 0 ? `<div class="row tax-row"><span>VAT (${(drinkTaxRate * 100).toFixed(0)}%):</span><span>Rs ${orderVat.toFixed(0)}</span></div>` : ''}
+        <div class="row tax-row"><span>Tax Total:</span><span>Rs ${order.tax.toFixed(0)}</span></div>
+        ${order.discountAmount && order.discountAmount > 0 ? `
+          <div class="row" style="color: #000;">
+            <span>Discount (${order.discountPercent}%):</span>
+            <span>-Rs ${order.discountAmount.toFixed(0)}</span>
+          </div>
+        ` : ''}
+        <div class="row bold total-section"><span>OVERALL TOTAL:</span><span>Rs ${order.total.toFixed(0)}</span></div>
+        <div class="line"></div>
+        <div class="center bold">Paid via ${order.paymentMode}</div>
+        <div style="margin-top: 10px; font-size: 12px; font-weight: 900;">
+          ${restaurantInfo.gstNo && restaurantInfo.gstNo !== 'NOT SET' ? '<div>GSTIN: ' + restaurantInfo.gstNo + '</div>' : ''}
+          ${restaurantInfo.vatNo && restaurantInfo.vatNo !== 'NOT SET' ? '<div>VAT NO: ' + restaurantInfo.vatNo + '</div>' : ''}
+          ${restaurantInfo.fssaiNo && restaurantInfo.fssaiNo !== 'NOT SET' ? '<div>FSSAI NO: ' + restaurantInfo.fssaiNo + '</div>' : ''}
+        </div>
+        <div class="footer center">
+          <p class="bold">Thank you!</p>
+          <p class="bold">Visit again.</p>
+        </div>
+      </div>
+    `;
+
+    printHtmlContent(html);
   };
 
   const doIframeKotPrint = (selectedTable: Table | undefined, itemsToPrint?: CartItem[]) => {
@@ -936,132 +938,93 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       `;
     }).join('');
 
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      alert('Unable to create print frame.');
-      document.body.removeChild(iframe);
-      return;
-    }
-
     const html = `
-      <html>
-        <head>
-          <title>KOT</title>
-          <style>
-            @page { margin: 0; size: 80mm auto; }
-            @media print {
-              @page { margin: 0; }
-              body { margin: 0; }
-            }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-              font-family: 'Courier New', monospace;
-              width: 76mm;
-              max-width: 76mm;
-              margin: 0 auto;
-              padding: 3mm 3mm 2mm;
-              font-size: 12px;
-              line-height: 1.25;
-              color: #000;
-            }
-            .center { text-align: center; }
-            .kot-title {
-              font-size: 20px;
-              font-weight: 900;
-              letter-spacing: 1px;
-              margin-bottom: 4px;
-            }
-            .divider {
-              border-top: 2px dashed #000;
-              margin: 5px 0;
-            }
-            .meta {
-              font-weight: 700;
-              margin: 2px 0;
-            }
-            .head-row,
-            .item-row {
-              display: flex;
-              justify-content: space-between;
-              gap: 6px;
-            }
-            .head-row {
-              font-weight: 900;
-              margin-top: 4px;
-              margin-bottom: 3px;
-            }
-            .item-row {
-              margin: 2px 0;
-              font-weight: 700;
-            }
-            .item-name {
-              flex: 1;
-              min-width: 0;
-              word-break: break-word;
-            }
-            .item-qty {
-              width: 26px;
-              text-align: right;
-              flex-shrink: 0;
-            }
-            .item-option {
-              font-size: 10px;
-              margin: 0 0 2px 6px;
-            }
-            .item-instruction {
-              font-size: 11px;
-              font-style: italic;
-              margin: 2px 0 2px 8px;
-              font-weight: 700;
-            }
-            .printed-at {
-              margin-top: 6px;
-              font-size: 10px;
-              text-align: center;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="center kot-title">K. O. T.</div>
-          <div class="divider"></div>
-          <div class="meta">TABLE: ${escapeHtml(tableName)}</div>
-          ${customerName ? `<div class="meta">CUST: ${escapeHtml(customerName)}</div>` : ''}
-          <div class="meta">TIME: ${escapeHtml(timeLabel)}</div>
-          <div class="divider"></div>
-          <div class="head-row">
-            <div>ITEM</div>
-            <div class="item-qty">QTY</div>
-          </div>
-          ${itemRows}
-          <div class="divider"></div>
-          <div class="printed-at">Printed at ${escapeHtml(printedAt)}</div>
-        </body>
-      </html>
+      <div class="kot-container">
+        <style>
+          .kot-container {
+            font-family: 'Courier New', monospace;
+            width: 76mm;
+            max-width: 76mm;
+            margin: 0 auto;
+            padding: 3mm 3mm 2mm;
+            font-size: 12px;
+            line-height: 1.25;
+            color: #000;
+            background-color: #fff;
+          }
+          .kot-container .center { text-align: center; }
+          .kot-container .kot-title {
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+          }
+          .kot-container .divider {
+            border-top: 2px dashed #000;
+            margin: 5px 0;
+          }
+          .kot-container .meta {
+            font-weight: 700;
+            margin: 2px 0;
+          }
+          .kot-container .head-row,
+          .kot-container .item-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+          }
+          .kot-container .head-row {
+            font-weight: 900;
+            margin-top: 4px;
+            margin-bottom: 3px;
+          }
+          .kot-container .item-row {
+            margin: 2px 0;
+            font-weight: 700;
+          }
+          .kot-container .item-name {
+            flex: 1;
+            min-width: 0;
+            word-break: break-word;
+          }
+          .kot-container .item-qty {
+            width: 26px;
+            text-align: right;
+            flex-shrink: 0;
+          }
+          .kot-container .item-option {
+            font-size: 10px;
+            margin: 0 0 2px 6px;
+          }
+          .kot-container .item-instruction {
+            font-size: 11px;
+            font-style: italic;
+            margin: 2px 0 2px 8px;
+            font-weight: 700;
+          }
+          .kot-container .printed-at {
+            margin-top: 6px;
+            font-size: 10px;
+            text-align: center;
+          }
+        </style>
+        <div class="center kot-title">K. O. T.</div>
+        <div class="divider"></div>
+        <div class="meta">TABLE: ${escapeHtml(tableName)}</div>
+        ${customerName ? `<div class="meta">CUST: ${escapeHtml(customerName)}</div>` : ''}
+        <div class="meta">TIME: ${escapeHtml(timeLabel)}</div>
+        <div class="divider"></div>
+        <div class="head-row">
+          <div>ITEM</div>
+          <div class="item-qty">QTY</div>
+        </div>
+        ${itemRows}
+        <div class="divider"></div>
+        <div class="printed-at">Printed at ${escapeHtml(printedAt)}</div>
+      </div>
     `;
 
-    iframeDoc.write(html);
-    iframeDoc.close();
-
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (err) {
-        console.error("Print error:", err);
-      }
-      setTimeout(() => {
-        if (document.body.contains(iframe)) document.body.removeChild(iframe);
-      }, 1000);
-    }, 150);
+    printHtmlContent(html);
   };
 
   const printKOT = async () => {
