@@ -889,6 +889,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           </div>
           <script>
             window.onload = function() {
+              window.focus();
               window.print();
               setTimeout(() => {
                 window.parent.postMessage('print-done', '*');
@@ -1054,6 +1055,7 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           <div class="printed-at">Printed at ${escapeHtml(printedAt)}</div>
           <script>
             window.onload = function() {
+              window.focus();
               window.print();
               setTimeout(() => {
                 window.parent.postMessage('print-done', '*');
