@@ -1281,6 +1281,13 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
       console.log("Finalizing order:", newOrder);
       await onCreateOrder(newOrder);
       console.log("onCreateOrder completed, real billNo:", newOrder.billNo);
+      
+      // Clear active QR code in Firebase to return customer display to standby
+      try {
+        await set(ref(db, 'activeUpiQr'), null);
+      } catch (err) {
+        console.error("Error clearing active QR on checkout:", err);
+      }
     }
 
     if (print) {
@@ -2271,10 +2278,10 @@ const BillingScreen: React.FC<BillingScreenProps> = ({
           </div>
 
           <div className="flex gap-2">
-            <PaymentTab active={paymentMode === 'CASH'} onClick={() => setPaymentMode('CASH')} icon={<Banknote size={16} />} label="Cash" />
-            <PaymentTab active={paymentMode === 'CARD'} onClick={() => setPaymentMode('CARD')} icon={<CreditCard size={16} />} label="Card" />
+            <PaymentTab active={paymentMode === 'CASH'} onClick={() => { setPaymentMode('CASH'); set(ref(db, 'activeUpiQr'), null).catch(err => console.error(err)); }} icon={<Banknote size={16} />} label="Cash" />
+            <PaymentTab active={paymentMode === 'CARD'} onClick={() => { setPaymentMode('CARD'); set(ref(db, 'activeUpiQr'), null).catch(err => console.error(err)); }} icon={<CreditCard size={16} />} label="Card" />
             <PaymentTab active={paymentMode === 'UPI'} onClick={() => { setPaymentMode('UPI'); handleSendUpiQrToMobile(); }} icon={<Smartphone size={16} />} label="UPI" />
-            <PaymentTab active={paymentMode === 'OTHER'} onClick={() => setPaymentMode('OTHER')} icon={<Wallet size={16} />} label="Others" />
+            <PaymentTab active={paymentMode === 'OTHER'} onClick={() => { setPaymentMode('OTHER'); set(ref(db, 'activeUpiQr'), null).catch(err => console.error(err)); }} icon={<Wallet size={16} />} label="Others" />
           </div>
 
           {paymentMode === 'UPI' && (
